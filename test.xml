@@ -1,0 +1,112 @@
+<xml xmlns="https://developers.google.com/blockly/xml">
+        <variables>
+                <variable id="T$NVE?nY$V:!++=p$%@*">aaaa</variable>
+                <variable id="G5%-DAWTXl;O+fYnah[Z">bbbb</variable>
+        </variables>
+        <block type="controls_repeat_ext" id="1r3MJJ3M6hg=IHO`S:wZ" x="68" y="31">
+                <value name="TIMES">
+                        <block type="math_arithmetic" id="Or;f,#}%U3tKp!l!OH4J">
+                                <field name="OP">ADD</field>
+                                <value name="A">
+                                        <block type="math_number" id="3/yni.k[%K1AL];%+R1Z">
+                                                <field name="NUM">0</field>
+                                        </block>
+                                </value>
+                                <value name="B">
+                                        <block type="math_number" id="rLXI*P[d,r%y;_b-GJi{">
+                                                <field name="NUM">15</field>
+                                        </block>
+                                </value>
+                        </block>
+                </value>
+                <statement name="DO">
+                        <block type="controls_if" id="S0y*cgnKLg.oT8J=fRWc">
+                                <mutation elseif="2" else="1"></mutation>
+                                <value name="IF0">
+                                        <block type="logic_boolean" id="_vb6k4(uFh;,,vo%yn`/">
+                                                <field name="BOOL">FALSE</field>
+                                        </block>
+                                </value>
+                                <statement name="DO0">
+                                        <block type="move_direction" id="$bWuZ^yBhqR_|nij;d1Z">
+                                                <field name="DIRECTION">LEFT</field>
+                                        </block>
+                                </statement>
+                                <value name="IF1">
+                                        <block type="variables_get" id="sG1O`^?;i`m%dp@1D=l*">
+                                                <field name="VAR" id="T$NVE?nY$V:!++=p$%@*">aaaa</field>
+                                        </block>
+                                </value>
+                                <statement name="DO1">
+                                        <block type="move_direction" id="aH,#fQddkRP%kehjPH@h">
+                                                <field name="DIRECTION">DOWN</field>
+                                        </block>
+                                </statement>
+                                <value name="IF2">
+                                        <block type="logic_compare" id="9omRi2Dne9b3h/JRQKmS">
+                                                <field name="OP">LT</field>
+                                                <value name="A">
+                                                        <block type="idx_param"
+                                                                id="[%rxx8nsTokO{~:,P)7]"></block>
+                                                </value>
+                                                <value name="B">
+                                                        <block type="variables_get"
+                                                                id="+y1vtKFw[j[,hQS+55K$">
+                                                                <field name="VAR"
+                                                                        id="G5%-DAWTXl;O+fYnah[Z">
+                                                                        bbbb</field>
+                                                        </block>
+                                                </value>
+                                        </block>
+                                </value>
+                                <statement name="DO2">
+                                        <block type="variables_set" id="g8Ed%F?GRK/5$_ppJdyx">
+                                                <field name="VAR" id="T$NVE?nY$V:!++=p$%@*">aaaa</field>
+                                                <value name="VALUE">
+                                                        <block type="logic_boolean"
+                                                                id="#pwW~_E,gO,icr:7EuPV">
+                                                                <field name="BOOL">TRUE</field>
+                                                        </block>
+                                                </value>
+                                        </block>
+                                </statement>
+                                <statement name="ELSE">
+                                        <block type="move_direction" id="x[_wUaT4HQR]nsx.6Q^q">
+                                                <field name="DIRECTION">UP</field>
+                                        </block>
+                                </statement>
+                                <next>
+                                        <block type="variables_set" id="X/EzTz{sqxa=rE=}?F-{">
+                                                <field name="VAR" id="G5%-DAWTXl;O+fYnah[Z">bbbb</field>
+                                                <value name="VALUE">
+                                                        <block type="math_number"
+                                                                id="[}j#vPx3E-.}[gwj1H~e">
+                                                                <field name="NUM">42</field>
+                                                        </block>
+                                                </value>
+                                                <next>
+                                                        <block type="move_direction"
+                                                                id=",]1nPPV=YoW*dLIU~/hH">
+                                                                <field name="DIRECTION">RIGHT</field>
+                                                        </block>
+                                                </next>
+                                        </block>
+                                </next>
+                        </block>
+                </statement>
+                <next>
+                        <block type="controls_repeat_ext" id="R+i+f7Isv]A85fQo!h;j">
+                                <value name="TIMES">
+                                        <block type="math_number" id="*,23MpA+(dmD5N4k[ZZs">
+                                                <field name="NUM">0</field>
+                                        </block>
+                                </value>
+                                <statement name="DO">
+                                        <block type="move_direction" id=":=JX2iRQ?)?FbK`1,niW">
+                                                <field name="DIRECTION">LEFT</field>
+                                        </block>
+                                </statement>
+                        </block>
+                </next>
+        </block>
+</xml>
