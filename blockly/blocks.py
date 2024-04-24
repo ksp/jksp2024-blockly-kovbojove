@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Self, Any, TypeVar
+from typing import Self, Any, Type, TypeVar
 
 from .actions import Action, ActionType, Direction
 from .exceptions import OutOfStepsException, ProgramParseException
@@ -32,7 +32,7 @@ class Field:
     def execute(self, run: Run) -> bool | int | str:
         pass
 
-    def check_type(self, wanted: type) -> str | None:
+    def check_type(self, wanted: type) -> None:
         pass
 
 
@@ -84,6 +84,13 @@ class StaticField(Field):
 
 ################################################################################
 
+type_to_js_type: dict[type, str] = {
+    bool: "Boolean",
+    int: "Number",
+    str: "String",
+}
+
+
 class BlockInputKind(Enum):
     FIELD = "field"
     VALUE = "value"
@@ -103,6 +110,29 @@ class BlockInput:
     variable: bool = False
     arg_group: int = 0  # for grouping block inputs in graphical blocks
 
+    def json_definition(self) -> dict[str]:
+        if self.kind == BlockInputKind.FIELD:
+            t = "field_input"
+            if self.dropdown is not None:
+                t = "field_dropdown"
+            elif self.data_type == int:
+                t = "field_number"
+            elif self.variable:
+                t = "field_variable"
+        elif self.kind == BlockInputKind.VALUE:
+            t = "input_value"
+        elif self.kind == BlockInputKind.STATEMENT:
+            t = "input_statement"
+        out = {
+            "type": t,
+            "name": self.name,
+        }
+        if self.dropdown:
+            out["options"] = self.dropdown
+        elif self.data_type != Any:
+            out["check"] = type_to_js_type[self.data_type]
+        return out
+
 
 ################################################################################
 
@@ -111,7 +141,10 @@ class Block:
 
     # For generating Blockly definition and for checks:
     name: str = "???"
+    color: int | None = None
+    tooltip: str | None = None
     inputs: list[BlockInput] = []
+    messages: list[str] = []  # texts displayed in graphical blocks
     returns: None | type = None  # if itself returns something (bool / int)
     has_prev: bool = False  # could run after another block
     has_next: bool = False  # another block could run after this one
@@ -121,6 +154,35 @@ class Block:
 
     def __str__(self) -> str:
         return f"block '{self.name}'"
+
+    @classmethod
+    def json_definition(cls) -> dict[str]:
+        out = {
+            "type": cls.name,
+        }
+        if cls.has_prev:
+            out["previousStatement"] = None
+        if cls.has_next:
+            out["nextStatement"] = None
+        if cls.returns is not None:
+            out["output"] = type_to_js_type[cls.returns]
+        if cls.color is not None:
+            out["colour"] = cls.color
+        if cls.tooltip is not None:
+            out["tooltip"] = cls.tooltip
+
+        for i, message in enumerate(cls.messages):
+            out[f"message{i}"] = message
+
+        arg_groups: dict[int, list[BlockInput]] = {}
+        for input in cls.inputs:
+            if input.arg_group not in arg_groups:
+                arg_groups[input.arg_group] = []
+            arg_groups[input.arg_group].append(input)
+        for i, arg_group in arg_groups.items():
+            out[f"args{i}"] = [input.json_definition() for input in arg_group]
+
+        return out
 
     def execute(self, run: Run) -> Action | bool | None:
         if self.next:
@@ -191,7 +253,10 @@ class Nop(Block):
 
 class IdxParam(Block):
     name = "idx_param"
+    messages = ["Index"]
     returns = int
+    color = 300
+    tooltip = "Index kovboje"
 
     def execute(self, run: Run) -> int:
         run.add_steps(1)
@@ -410,12 +475,15 @@ class MathArithmetic(Block):
 
 class MoveDirection(Block):
     name = "move_direction"
+    messages = ["Move %1"]
     inputs = [
         BlockInput(BlockInputKind.FIELD, "direction", "DIRECTION", str, dropdown=[
             ("←", "LEFT"), ("↑", "UP"), ("→", "RIGHT"), ("↓", "DOWN"),
         ]),
     ]
     has_prev = True
+    color = 120
+    tooltip = "Přesune kovboje v daném směru a ukončí tah"
 
     direction: Field
 
@@ -508,3 +576,63 @@ class ControlsIf(Block):
             return ret
 
         return super().execute(run)
+
+
+################################################################################
+
+cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
+    ("Cykly a logika", None, [
+        ControlsRepeatExt,
+        ControlsIf,
+        LogicCompare,
+        LogicOperation,
+        LogicNegate,
+    ]),
+    ("Konstanty a matematika", None, [
+        IdxParam,
+        LogicBoolean,
+        MathNumber,
+        MathArithmetic,
+        # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
+    ]),
+    ("Akce", None, [
+        MoveDirection,
+    ]),
+    ("Proměnné", {"custom": "VARIABLE"}, [
+        VariablesGet,
+        VariablesSet,
+        MathChange,
+    ]),
+]
+
+cowboy_factories: dict[str, Type[Block]] = {
+    block.name: block for category in cowboy_blocks for block in category[2]
+}
+
+bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
+    ("Cykly a logika", None, [
+        ControlsRepeatExt,
+        ControlsIf,
+        LogicCompare,
+        LogicOperation,
+        LogicNegate,
+    ]),
+    ("Konstanty a matematika", None, [
+        IdxParam,
+        LogicBoolean,
+        MathNumber,
+        MathArithmetic,
+        # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
+    ]),
+    ("Akce", None, [
+    ]),
+    ("Proměnné", {"custom": "VARIABLE"}, [
+        VariablesGet,
+        VariablesSet,
+        MathChange,
+    ]),
+]
+
+bullet_factories: dict[str, Type[Block]] = {
+    block.name: block for category in bullet_blocks for block in category[2]
+}

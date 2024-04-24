@@ -33,66 +33,11 @@
             drawGrid();
 
             workspace = Blockly.inject('blocklyDiv', {
-                toolbox: {
-                    "kind": "categoryToolbox",
-                    "contents": [
-                        {
-                            "kind": "category",
-                            "expanded": "true",
-                            "name": "Cykly a logika",
-                            "contents": [
-                                {"kind": "block", "type": "controls_repeat_ext"},
-                                {"kind": "block", "type": "controls_if"},
-                                {"kind": "block", "type": "logic_compare"},
-                                {"kind": "block", "type": "logic_operation"},
-                                {"kind": "block", "type": "logic_negate"},
-                            ]
-                        },
-                        {
-                            "kind": "category",
-                            "name": "Konstanty a matematika",
-                            "contents": [
-                                {"kind": "block", "type": "idx_param"},
-                                {"kind": "block", "type": "logic_boolean"},
-                                {"kind": "block", "type": "math_number"},
-                                {"kind": "block", "type": "math_arithmetic"},
-                                {"kind": "block", "type": "math_modulo"},
-                            ]
-                        },
-                        {
-                            "kind": "category",
-                            "name": "Akce",
-                            "contents": [
-                                {"kind": "block", "type": "move_direction"},
-                            ]
-                        },
-                        {
-                            "kind": "category",
-                            "name": "Proměnné",
-                            "custom": "VARIABLE",
-                        }
-                    ]
-                }
+                toolbox: {{ toolbox | tojson(indent=4) | indent(width=16) }}
             });
         }
 
-        Blockly.Blocks['move_direction'] = {
-            init: function() {
-                this.appendDummyInput()
-                    .appendField("Move")
-                    .appendField(new Blockly.FieldDropdown([
-                        ["←", "LEFT"],
-                        ["↑", "UP"],
-                        ["→", "RIGHT"],
-                        ["↓", "DOWN"]
-                    ]), "DIRECTION");
-                this.setPreviousStatement(true, null);
-                this.setNextStatement(false, null);
-                this.setColour(150);
-                this.setTooltip("");
-                this.setHelpUrl("");
-            }
-        };
+        Blockly.defineBlocksWithJsonArray({{ custom_blocks | tojson(indent=4) | indent(width=8) }});
 
         // Blockly.Blocks['comparison'] = {
         //     init: function() {
@@ -135,17 +80,5 @@
         //         this.setHelpUrl("");
         //         }
         //     };
-
-        Blockly.Blocks['idx_param'] = {
-            init: function() {
-                this.appendDummyInput()
-                    .appendField("index");
-                this.setInputsInline(true);
-                this.setOutput(true, "Number")
-                this.setColour(300);
-                this.setTooltip("");
-                this.setHelpUrl("");
-            }
-        }
     </script>
 </body>
