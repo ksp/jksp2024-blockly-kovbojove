@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block head %}
+<script src="{{ url_for('static', filename='lib/blockly.min.js') }}"></script>
+{% endblock %}
+{% block title %}Kovboj{% endblock %}
+{% block body %}
+</main>
+<div id="blocklyDiv" style="height: 70vh; width: 100%;"></div>
+<main>
+
+<div class="card">
+    <div class="card-body">
+        <div id="editor-alert"></div>
+        <div class="row">
+            <label for="name" class="col-sm-2 col-form-label">Název programu:</label>
+            <div class="col-sm-5">
+                <input type="text" class="col-auto form-control" name="name" id="program-name">
+            </div>
+            <div class="col-sm-5 btn-group">
+                <button type="button" id="program-save" class="btn btn-primary" disabled onclick="saveProgram(true)">Uložit (a přepsat)</button>
+                <button type="button" id="program-save-new" class="btn btn-primary" onclick="saveProgram(false)">Uložit jako nový</button>
+            </div>
+        </div>
+        <div class="row mt-2">
+            <label for="name" class="col-sm-2 col-form-label">Popis:<br><small>(pro vás)</small></label>
+            <div class="col-sm-10">
+                <textarea name="description" id="program-description" class="form-control"></textarea>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h2 class="mt-2">Programy</h2>
+<div id="list-alert"></div>
+<table class="table table-hover">
+<thead>
+    <tr><th>Název</th><th>Popis</th><th><button class="float-end btn btn-sm btn-outline-primary" onclick="loadNew()">Nový program</button></th></tr>
+</thead>
+<tbody id="program-list"></tbody>
+</table>
+
+<script>
+var gEditorUUID = null;
+var gPrograms = {}
+
+var elEditorAlert = document.getElementById('editor-alert');
+var elListAlert = document.getElementById('list-alert');
+var elName = document.getElementById('program-name');
+var elDescription = document.getElementById('program-description');
+var elProgramSave = document.getElementById('program-save');
+var elProgramSaveNew = document.getElementById('program-save-new');
+var elProgramList = document.getElementById('program-list');
+
+var workspace = Blockly.inject('blocklyDiv', {
+    toolbox: {{ toolbox | tojson(indent=4) | indent(width=16) }}
+});
+
+Blockly.defineBlocksWithJsonArray({{ custom_blocks | tojson(indent=4) | indent(width=8) }});
+
+function loadNew() {
+    gEditorUUID = null;
+    elName.value = "";
+    elDescription.value = "";
+    elProgramSave.disabled = true;
+    workspace.clear();
+    window.scrollTo(0, 0);
+}
+
+async function loadProgram(uuid) {
+    fetch('/api/cowboy/' + uuid + '/code')
+    .then(response => response.text())
+    .then(code => {
+        gEditorUUID = uuid;
+        elName.value = gPrograms[uuid]['name'];
+        elDescription.value = gPrograms[uuid]['description'];
+        elProgramSave.disabled = false;
+
+        Blockly.Xml.clearWorkspaceAndLoadFromXml(Blockly.utils.xml.textToDom(code), workspace);
+        window.scrollTo(0, 0);
+
+        var rows = document.querySelectorAll(".program-row");
+        rows.forEach(row => row.classList.remove('table-primary'));
+        document.getElementById('row-'+uuid).classList.add('table-primary');
+    }).catch(error => {
+        bootstrap_alert(elListAlert, "danger", "<strong>Chyba při nahrávání programu:</strong> "+error['error']);
+    });
+}
+
+async function deleteProgram(uuid) {
+    if (!confirm('Opravdu smazat program "' + gPrograms[uuid]['name'] + '"?')) {
+        return;
+    }
+
+    return fetch('/api/cowboy/' + uuid, {
+        method: 'DELETE'
+    }).then(response => {
+        if (response.ok) {
+            bootstrap_alert(elListAlert, "info", "Program smazán");
+            reloadList();
+        } else {
+            return response.json().then(errResp => { throw new Error(errResp['error']) });
+        }
+    }).catch(err => {
+        bootstrap_alert(elListAlert, "danger", "<strong>Chyba při mazání:</strong> "+err.message);
+    });
+}
+
+async function setActive(uuid) {
+    return fetch('/api/cowboy/' + uuid + '/active', {
+        method: 'POST'
+    }).then(response => {
+        if (response.ok) {
+            bootstrap_alert(elListAlert, "success", "Program nastaven jako aktivní");
+            reloadList();
+        } else {
+            return response.json().then(errResp => { throw new Error(errResp['error']) });
+        }
+    }).catch(err => {
+        bootstrap_alert(elListAlert, "danger", "<strong>Chyba při nastavování:</strong> "+err.message);
+    });
+}
+
+async function reloadList() {
+    return fetch('/api/cowboy')
+    .then(response => response.json())
+    .then(programs => {
+        var newList = document.createElement("tbody");
+        programs.forEach(program => {
+            var uuid = program['uuid'];
+            gPrograms[uuid] = program;
+
+            var row = newList.insertRow();
+            row.classList.add("program-row");
+            row.id = "row-" + uuid;
+
+            var name = row.insertCell()
+            if (program['active']) {
+                name.innerHTML = "<strong>" + program['name'] + "</strong> (aktivní)";
+            } else {
+                name.innerText = program['name'];
+            }
+
+            var description = row.insertCell();
+            description.innerText = program['description'];
+
+            var buttons = "<div class='btn-group'>";
+            buttons += "<button class='btn btn-sm btn-outline-primary' onclick='loadProgram(\"" + uuid + "\")'>Načíst v editoru</button>";
+            if (!program['active']) {
+                buttons += "<button class='btn btn-sm btn-outline-success' onclick='setActive(\"" + uuid + "\")'>Nastavit jako aktivní</button>";
+                buttons += "<button class='btn btn-sm btn-outline-danger' onclick='deleteProgram(\"" + uuid + "\")'>Smazat</button>";
+            }
+            buttons += "</div>";
+            var actions = row.insertCell();
+            actions.innerHTML = buttons;
+        });
+        elProgramList.innerHTML = newList.innerHTML;
+    });
+}
+
+async function saveProgram(overwrite) {
+    var xml = Blockly.Xml.workspaceToDom(workspace);
+    xml_code = Blockly.Xml.domToText(xml);
+
+    var data = {
+        'name': elName.value,
+        'description': elDescription.value,
+        'program': xml_code,
+    };
+
+    if (overwrite && gEditorUUID) {
+        data['uuid'] = gEditorUUID;
+    }
+
+    fetch('/api/cowboy', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data),
+    }).then(response => {
+        if (response.ok) {
+            return response.json();
+        } else {
+            return response.json().then(errResp => { throw new Error(errResp['error']) });
+        }
+    }).then(resp => {
+        bootstrap_alert(elEditorAlert, "success", "Program uložen");
+        gEditorUUID = resp['uuid'];
+        elProgramSave.disabled = false;
+        reloadList();
+    }).catch(err => {
+        bootstrap_alert(elEditorAlert, "danger", "<strong>Neuloženo!</strong> "+err.message);
+    });
+}
+
+loadNew();
+reloadList()
+.then(x => {
+    Object.keys(gPrograms).forEach(function(uuid) {
+        if (gPrograms[uuid]['active']) {
+            loadProgram(uuid);
+        }
+    });
+})
+
+
+    // Blockly.Blocks['comparison'] = {
+    //     init: function() {
+    //         this.appendValueInput("A")
+    //             .setCheck("Number");
+    //         this.appendDummyInput()
+    //             .appendField(new Blockly.FieldDropdown([
+    //                 ["≤", "LE"],
+    //                 ["<", "LT"],
+    //                 ["=", "EQ"]
+    //             ]), "OPERATOR");
+    //         this.appendValueInput("B")
+    //             .setCheck("Number");
+    //         this.setInputsInline(true);
+    //         this.setOutput(true, "Boolean");
+    //         this.setColour(10);
+    //         this.setTooltip("");
+    //         this.setHelpUrl("");
+    //     }
+    // };
+
+    // Blockly.Blocks['arithmetic'] = {
+    //     init: function() {
+    //         this.appendValueInput("A")
+    //             .setCheck("Number");
+    //         this.appendDummyInput()
+    //             .appendField(new Blockly.FieldDropdown([
+    //                 ["+", "PLUS"],
+    //                 ["-", "MIN"],
+    //                 ["×", "MULT"],
+    //                 ["÷", "DIV"],
+    //                 ["%", "MOD"]
+    //             ]), "OPERATOR");
+    //         this.appendValueInput("B")
+    //             .setCheck("Number");
+    //         this.setInputsInline(true);
+    //         this.setOutput(true, "Number");
+    //         this.setColour(230);
+    //         this.setTooltip("");
+    //         this.setHelpUrl("");
+    //         }
+    //     };
+</script>
+{% endblock %}

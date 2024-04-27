@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Blockly: {% block title %}{% endblock %}</title>
+	<link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+	<link rel=stylesheet href="{{ url_for('static', filename='lib/bootstrap.min.css') }}" type='text/css' media=all>
+	<link rel=stylesheet href="{{ url_for('static', filename='app.css') }}" type='text/css' media=all>
+	<script src="{{ url_for('static', filename='lib/bootstrap.bundle.min.js') }}"></script>
+	<script src="{{ url_for('static', filename='app.js') }}"></script>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header>
+	<nav id="main-menu" class="content">
+		<h1><small>{{ g.team and "Tým " + g.team.login or "Blockly" }}</small> {{self.title()}}</h1>
+		{% for item in get_menu() %}
+			<a {% if item.classes %}class="{{ " ".join(item.classes) }}"{% endif %} href="{{ item.url }}">{{ item.name }}</a>
+		{% endfor %}
+		{% if g.team or g.is_org %}
+			<form class="right" method=POST action='{{ url_for('logout') }}'><input type=submit value='Logout'></form>
+		{% endif %}
+	</nav>
+</header>
+<main>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+	{% for category, message in messages %}
+		{% if category == 'message' %}
+		<div class="alert alert-warning" role="alert">
+		{% else %}
+		<div class="alert alert-{{ category }}" role="alert">
+		{% endif %}
+		{{ message }}
+		</div>
+	{% endfor %}
+{% endif %}
+{% endwith %}
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

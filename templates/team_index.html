@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% from "bootstrap5/form.html" import render_form %}
+{% block title %}Přehled{% endblock %}
+{% block body %}
+
+<canvas id="gridCanvas" width="500" height="500"></canvas>
+
+<script>
+	canvas = document.getElementById('gridCanvas');
+	canvasContext = canvas.getContext('2d');
+	drawGrid();
+</script>
+
+{% endblock %}

@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "bootstrap5/form.html" import render_form %}
+{% block title %}Přihlášení týmu{% endblock %}
+{% block body %}
+
+	{{ render_form(form, form_type="horizontal") }}
+
+{% endblock %}

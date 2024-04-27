@@ -1,0 +1,74 @@
+body {
+	display: flex;
+	flex-direction: column;
+	background-color: white;
+	color: black;
+	margin: 0;
+	min-height: 100vh;
+}
+
+.content, main {
+	display: block;
+	margin: 0 auto;
+	padding: 0 1em;
+	max-width: 1000px;
+	width: 100%;
+}
+
+main {
+	display: flex;
+	flex-direction: column;
+	padding: 1em;
+}
+
+header {
+	top: 0;
+	background-color: #222;
+	border: 1px #222 solid;
+	z-index: 1010;
+	display: flex;
+}
+header h1 {
+	color: white;
+	font-variant: small-caps;
+	font-size: 1.9em;
+	margin: auto 0px;
+	padding: auto 0px;
+	padding-right: 20px;
+	margin-right: 5px;
+	border-right: 2px #444 solid;
+}
+header h1 small {
+	color: #aaa
+}
+
+nav#main-menu {
+	display: flex;
+	flex-wrap: wrap;
+}
+
+nav#main-menu a, nav#main-menu input[type=submit] {
+	background: none;
+	border: none;
+	margin: 0px;
+	color: white;
+	font-size: 1em;
+	text-align: center;
+	padding: 14px 16px;
+	text-decoration: none;
+}
+
+/* Only the first item with .right class does the margin trick */
+nav#main-menu > .right { margin-left: auto; }
+nav#main-menu > .right ~ .right { margin-left: 0px; }
+
+nav#main-menu a:hover:not(.active), nav#main-menu input[type=submit]:hover {
+	cursor: pointer;
+	background-color: #555;
+	color: white;
+}
+
+nav#main-menu a.active {
+	background-color: #ddd;
+	color: black;
+}
