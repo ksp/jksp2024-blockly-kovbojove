@@ -3,6 +3,7 @@ from datetime import datetime
 import sys
 import dateutil.parser
 import json
+import os
 
 from .blocks import bullet_factories, cowboy_factories
 from .exceptions import ProgramParseException
@@ -38,6 +39,9 @@ class Team:
         self.bullet_programs = {}
 
         if load_from_file:
+            if not os.path.isfile(self._team_filename()):
+                return
+
             with open(self._team_filename()) as f:
                 data = json.load(f)
 
@@ -107,16 +111,26 @@ class Team:
         with open(self._team_filename(), "w") as f:
             json.dump(data, f, indent=4)
 
-    def save_cowboy(self, uuid: str, name: str, description: str, program: Program) -> None:
-        self.cowboy_programs[uuid] = TeamProgram(
+    def save_cowboy(self, uuid: str, name: str, description: str, program: Program) -> TeamProgram:
+        cowboy = TeamProgram(
             name=name, description=description, last_modified=datetime.now(),
             program=program)
+        self.cowboy_programs[uuid] = cowboy
 
         with open(self._program_filename("cowboy", uuid), "w") as f:
             f.write(program.raw_xml)
 
         if self.active_cowboy is None:
             self.active_cowboy = uuid
+        self._save()
+
+        return cowboy
+
+    def delete_cowboy(self, uuid: str) -> None:
+        if uuid not in self.cowboy_programs or uuid == self.active_cowboy:
+            return
+        os.remove(self._program_filename("cowboy", uuid))
+        del self.cowboy_programs[uuid]
         self._save()
 
     def set_active_cowboy(self, uuid: str):
@@ -130,16 +144,26 @@ class Team:
         else:
             return nop_program
 
-    def save_bullet(self, uuid: str, name: str, description: str, program: Program) -> None:
-        self.bullet_programs[uuid] = TeamProgram(
+    def save_bullet(self, uuid: str, name: str, description: str, program: Program) -> TeamProgram:
+        bullet = TeamProgram(
             name=name, description=description, last_modified=datetime.now(),
             program=program)
+        self.bullet_programs[uuid] = bullet
 
         with open(self._program_filename("bullet", uuid), "w") as f:
             f.write(program.raw_xml)
 
         if self.active_bullet is None:
             self.active_bullet = uuid
+        self._save()
+
+        return bullet
+
+    def delete_bullet(self, uuid: str) -> None:
+        if uuid not in self.bullet_programs or uuid == self.active_bullet:
+            return
+        os.remove(self._program_filename("bullet", uuid))
+        del self.bullet_programs[uuid]
         self._save()
 
     def set_active_bullet(self, uuid: str):
