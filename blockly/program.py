@@ -1,6 +1,14 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 from .actions import Action
 from .blocks import Block, Run, Nop
 from .exceptions import OutOfStepsException
+
+# Brake circular dependency only used for type checking
+if TYPE_CHECKING:
+    from .map import GameMap, Cowboy, Bullet
+
 
 
 class Program:
@@ -14,7 +22,7 @@ class Program:
         self.raw_xml = raw_xml
 
     # returns (True/False, action/string error, #steps)
-    def execute(self, max_steps: int) -> tuple[bool, Action | str, int]:
+    def execute(self, max_steps: int, map: GameMap, context: Cowboy | Bullet) -> tuple[bool, Action | str, int]:
         variables = {}
         for key, t in self.variables.items():
             if t == bool:
@@ -22,7 +30,7 @@ class Program:
             elif t == int:
                 variables[key] = 0
 
-        run = Run(max_steps=max_steps, variables=variables)
+        run = Run(max_steps=max_steps, variables=variables, map=map, context=context)
 
         try:
             result = self.root.execute(run)
