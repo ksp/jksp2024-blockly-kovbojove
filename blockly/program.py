@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+import traceback
 
 from .actions import Action
 from .blocks import Block, Run, Nop, Position
@@ -44,8 +45,9 @@ class Program:
             return True, result, steps
         except OutOfStepsException:
             return False, "Out of steps", run.steps
-        except Exception:
-            return False, "Should not happen :(", run.steps
+        except Exception as e:
+            traceback.print_tb(e.__traceback__)
+            return False, f"Should not happen, exception: {e}", run.steps
 
 
 nop_program = Program(Nop({}, {}, {}, {}, None), {}, '<xml xmlns="https://developers.google.com/blockly/xml"></xml>')
