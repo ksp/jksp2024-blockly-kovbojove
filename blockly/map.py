@@ -546,8 +546,12 @@ class GameMap:
         return -1 if c is None else c.team
 
     # This cowboy's index for this turn (assigned randomly)
-    def my_id(self, cowboy: Cowboy) -> int:
-        return self.active_cowboys.index(cowboy)
+    def my_id(self, context: Cowboy | Bullet) -> int:
+        if type(context) is Cowboy:
+            return self.active_cowboys.index(context)
+        elif type(context) is Bullet:
+            return self.bullet_list.index(context)
+        return -1
 
     # My teams's ID
     def my_team(self, context: Cowboy | Bullet) -> int:

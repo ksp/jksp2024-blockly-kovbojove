@@ -21,6 +21,16 @@ class Direction(Enum):
     NW = (-1, 1)
 
 
+all_directions: list[Direction] = [
+    Direction.W, Direction.NW, Direction.N, Direction.NE,
+    Direction.E, Direction.SE, Direction.S, Direction.SW,
+]
+cowboy_directions: list[Direction] = [
+    Direction.W, Direction.N, Direction.E, Direction.S,
+]
+bullet_directions: list[Direction] = all_directions
+
+
 @dataclass
 class Action:
     type: ActionType

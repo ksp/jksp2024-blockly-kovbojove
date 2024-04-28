@@ -1,7 +1,7 @@
 from typing import Type, Any
 import xml.etree.ElementTree as ET
 
-from .blocks import Block, StaticField, VariableField
+from .blocks import Block, Field, StaticField, VariableField
 from .exceptions import ProgramParseException
 from .program import Program
 
@@ -29,7 +29,7 @@ class ParserInstance:
         self.factories = factories
         self.variables = {}
 
-    def parse_program(self, xml_input: str) -> Program:
+    def parse_program(self, xml_input: str) -> tuple[Block, dict[str, type]]:
         root_block: Block | None = None
 
         for el in ET.XML(xml_input):
@@ -62,6 +62,8 @@ class ParserInstance:
     def parse_variables(self, xml_variables: ET.Element):
         self.variables = {}
         for variable in xml_variables:
+            if variable.text is None:
+                raise ProgramParseException("Empty variable definition")
             var = variable.text.strip()
             if var in self.variables:
                 raise ProgramParseException(f"Duplicate variable {var}")
@@ -74,8 +76,8 @@ class ParserInstance:
         factory = self.factories[type]
 
         # Get mutation, fields, values, statements and next
-        mutation: dict[str, str | int] = {}
-        fields: dict[str, StaticField] = {}
+        mutation: dict[str, str] = {}
+        fields: dict[str, Field] = {}
         values: dict[str, Block] = {}
         statements: dict[str, Block] = {}
         next: Block | None = None
@@ -88,7 +90,10 @@ class ParserInstance:
             elif tag == "field":
                 name = el.attrib['name']
                 el_path = f"{path}.field[{name}]"
+                if el.text is None:
+                    raise ProgramParseException(f"{el_path}: Empty tag {name}")
                 value = el.text.strip()
+                field: Field
                 if name == "VAR":
                     if value not in self.variables:
                         raise ProgramParseException(f"{el_path}: Variable {value} not specified in <variables>")

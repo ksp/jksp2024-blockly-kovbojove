@@ -1,20 +1,33 @@
+from __future__ import annotations
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Self, Any, Type, TypeVar
+from typing import Any, Type, TypeAlias, TypeVar, TYPE_CHECKING, cast
 
-from .actions import Action, ActionType, Direction
+from .actions import Action, ActionType, all_directions, cowboy_directions, bullet_directions
 from .exceptions import OutOfStepsException, ProgramParseException
+
+# Brake circular dependency only used for type checking
+if TYPE_CHECKING:
+    from .map import GameMap, Cowboy, Bullet
+
+Position = tuple[int, int]
 
 
 class Run:
     max_steps: int
     steps: int
-    variables: dict[str, int | bool]
+    variables: dict[str, int | bool | Position]
+    map: GameMap
+    context: Cowboy | Bullet
 
-    def __init__(self, max_steps: int, variables: dict[str, int | bool]) -> None:
+    def __init__(self, max_steps: int, variables: dict[str, int | bool | Position],
+                 map: GameMap, context: Cowboy | Bullet) -> None:
         self.max_steps = max_steps
         self.steps = 0
         self.variables = variables
+        self.map = map
+        self.context = context
 
     def add_steps(self, steps: int):
         self.steps += steps
@@ -29,7 +42,8 @@ class Field:
 
     name: str
 
-    def execute(self, run: Run) -> bool | int | str:
+    @abstractmethod
+    def execute(self, run: Run) -> bool | int | str | Position:
         pass
 
     def check_type(self, wanted: type) -> None:
@@ -38,7 +52,7 @@ class Field:
 
 class VariableField(Field):
     is_variable = True
-    var_type: type
+    var_type: type | Any
 
     def __init__(self, name: str) -> None:
         self.name = name
@@ -51,11 +65,12 @@ class VariableField(Field):
         # Variable could be any type, will be checked after parsing the whole program
         self.var_type = wanted
 
-    def execute(self, run: Run) -> int | bool:
+    def execute(self, run: Run) -> bool | int | Position:
         return run.variables[self.name]
 
 
 class StaticField(Field):
+    # Cannot be Position
     value: bool | int | str
     returns: type
 
@@ -78,16 +93,17 @@ class StaticField(Field):
         if wanted != self.returns:
             raise ProgramParseException(f"{self.name} is {self.returns} but {wanted} wanted")
 
-    def execute(self, run: Run) -> str | bool:
+    def execute(self, run: Run) -> bool | int | str:
         return self.value
 
 
 ################################################################################
 
-type_to_js_type: dict[type, str] = {
+type_to_js_type: dict[type | TypeAlias, str] = {
     bool: "Boolean",
     int: "Number",
     str: "String",
+    Position: "Position",
 }
 
 
@@ -103,14 +119,14 @@ class BlockInputKind(Enum):
 @dataclass
 class BlockInput:
     kind: BlockInputKind
-    attr: str  # name of the object attribute to save into
+    attr: str | None  # name of the object attribute to save into
     name: str
-    data_type: type = Any
+    data_type: type | Any = Any
     dropdown: list[tuple[str, str]] | None = None
     variable: bool = False
     arg_group: int = 0  # for grouping block inputs in graphical blocks
 
-    def json_definition(self) -> dict[str]:
+    def json_definition(self) -> dict:
         if self.kind == BlockInputKind.FIELD:
             t = "field_input"
             if self.dropdown is not None:
@@ -123,7 +139,7 @@ class BlockInput:
             t = "input_value"
         elif self.kind == BlockInputKind.STATEMENT:
             t = "input_statement"
-        out = {
+        out: dict = {
             "type": t,
             "name": self.name,
         }
@@ -144,20 +160,21 @@ class Block:
     color: int | None = None
     tooltip: str | None = None
     inputs: list[BlockInput] = []
+    inputs_inline: bool = True
     messages: list[str] = []  # texts displayed in graphical blocks
-    returns: None | type = None  # if itself returns something (bool / int)
+    returns: None | type | TypeAlias = None  # if itself returns something (bool / int)
     has_prev: bool = False  # could run after another block
     has_next: bool = False  # another block could run after this one
 
     # Instance variables:
-    next: Self | None
+    next: Block | None
 
     def __str__(self) -> str:
         return f"block '{self.name}'"
 
     @classmethod
-    def json_definition(cls) -> dict[str]:
-        out = {
+    def json_definition(cls) -> dict:
+        out: dict = {
             "type": cls.name,
         }
         if cls.has_prev:
@@ -170,6 +187,8 @@ class Block:
             out["colour"] = cls.color
         if cls.tooltip is not None:
             out["tooltip"] = cls.tooltip
+        if cls.inputs_inline:
+            out["inputsInline"] = True
 
         for i, message in enumerate(cls.messages):
             out[f"message{i}"] = message
@@ -184,7 +203,7 @@ class Block:
 
         return out
 
-    def execute(self, run: Run) -> Action | bool | None:
+    def execute(self, run: Run) -> Action | Position | bool | int | None:
         if self.next:
             return self.next.execute(run)
         return None
@@ -210,9 +229,9 @@ class Block:
 
         return [(input, given[input.name]) for input in wanted]
 
-    def __init__(self, mutation: dict[str, str | int],
-                 fields: dict[str, Field], values: dict[str, Self],
-                 statements: dict[str, Self], next: Self | None) -> None:
+    def __init__(self, mutation: dict[str, str],
+                 fields: dict[str, Field], values: dict[str, Block],
+                 statements: dict[str, Block], next: Block | None) -> None:
 
         wanted_fields = self._get_inputs(BlockInputKind.FIELD, fields)
         for input, field in wanted_fields:
@@ -246,23 +265,286 @@ class Block:
 
 class Nop(Block):
     name = "nop"
+    messages = ["Stát"]
+    has_prev = True
+    color = 120
+    tooltip = "Nedělat nic"
 
     def execute(self, run: Run) -> Action:
         return Action(ActionType.NOP)
 
 
-class IdxParam(Block):
-    name = "idx_param"
-    messages = ["Index"]
+class InfoTeam(Block):
+    name = "info_team"
+    messages = ["Můj tým"]
     returns = int
-    color = 300
-    tooltip = "Index kovboje"
+    color = 340
+    tooltip = "Index mého týmu (int)"
 
     def execute(self, run: Run) -> int:
         run.add_steps(1)
-        # FIXME: add real id
-        return 0
+        return run.context.team
 
+
+class InfoIndex(Block):
+    name = "info_index"
+    messages = ["Můj index"]
+    returns = int
+    color = 340
+    tooltip = "Moje pořadové číslo v týmu (stejné po celou hru)"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.context.index
+
+
+class InfoID(Block):
+    name = "info_id"
+    messages = ["Moje ID"]
+    returns = int
+    color = 300
+    tooltip = "Moje ID v seznamu všech entit, mění se každé kolo"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.my_id(run.context)
+
+
+class InfoMyPosition(Block):
+    name = "info_position"
+    messages = ["Moje pozice"]
+    returns = Position
+    color = 300
+    tooltip = "Vrátí moji současnou pozici (X, Y)"
+
+    def execute(self, run: Run) -> Position:
+        run.add_steps(1)
+        return run.map.my_position(run.context)
+
+
+# Golds:
+
+class InfoGoldCount(Block):
+    name = "info_gold_count"
+    messages = ["# zlata"]
+    returns = int
+    color = 340
+    tooltip = "Vrátí počet zlata na hracím plánu"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.number_of_golds()
+
+
+class InfoGoldPosition(Block):
+    name = "info_gold_position"
+    messages = ["Pozice zlata %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "gold_block", "GOLD", int),
+    ]
+    returns = Position
+    color = 340
+    tooltip = "Vrátí souřadnice (X, Y) zlata s daným ID"
+
+    gold_block: Block
+
+    def execute(self, run: Run) -> Position:
+        run.add_steps(1)
+        gold = self.gold_block.execute(run)
+        assert isinstance(gold, int)
+        return run.map.gold_i_position(gold)
+
+
+# Cowboys:
+
+class InfoCowboyCount(Block):
+    name = "info_cowboy_count"
+    messages = ["# kovbojů"]
+    returns = int
+    color = 340
+    tooltip = "Vrátí počet kovbojů na hracím plánu"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.number_of_cowboys()
+
+
+class InfoCowboyTeam(Block):
+    name = "info_cowboy_team"
+    messages = ["Tým kovboje %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "cowboy_block", "COWBOY", int),
+    ]
+    returns = int
+    color = 340
+    tooltip = "Vrátí index týmu kovboje s daným ID"
+
+    cowboy_block: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        cowboy = self.cowboy_block.execute(run)
+        assert isinstance(cowboy, int)
+        return run.map.cowboy_i_team(cowboy)
+
+
+class InfoCowboyPosition(Block):
+    name = "info_cowboy_position"
+    messages = ["Pozice kovboje %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "cowboy_block", "COWBOY", int),
+    ]
+    returns = Position
+    color = 340
+    tooltip = "Vrátí souřadnice (X, Y) kovboje s daným ID"
+
+    cowboy_block: Block
+
+    def execute(self, run: Run) -> Position:
+        run.add_steps(1)
+        cowboy = self.cowboy_block.execute(run)
+        assert isinstance(cowboy, int)
+        return run.map.cowboy_i_position(cowboy)
+
+
+# Bullets:
+
+class InfoBulletCount(Block):
+    name = "info_bullet_count"
+    messages = ["# střel"]
+    returns = int
+    color = 340
+    tooltip = "Vrátí počet střel na hracím plánu"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.number_of_bullets()
+
+
+class InfoBulletPosition(Block):
+    name = "info_bullet_position"
+    messages = ["Pozice střely %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "bullet_block", "BULLET", int),
+    ]
+    returns = Position
+    color = 340
+    tooltip = "Vrátí souřadnice (X, Y) střely s daným ID"
+
+    bullet_block: Block
+
+    def execute(self, run: Run) -> Position:
+        run.add_steps(1)
+        bullet = self.bullet_block.execute(run)
+        assert isinstance(bullet, int)
+        return run.map.bullet_i_position(bullet)
+
+
+# Position transformations:
+
+class TransformPositionX(Block):
+    name = "transform_position_x"
+    messages = ["%1→X"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "block_position", "POSITION", Position),
+    ]
+    returns = int
+    color = 300
+    tooltip = "Vrátí X souřadnici z (X, Y)"
+
+    block_position: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        pos = cast(Position, self.block_position.execute(run))
+        return pos[0]
+
+
+class TransformPositionY(Block):
+    name = "transform_position_y"
+    messages = ["%1→Y"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "block_position", "POSITION", Position),
+    ]
+    returns = int
+    color = 300
+    tooltip = "Vrátí Y souřadnici z (X, Y)"
+
+    block_position: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        pos = cast(Position, self.block_position.execute(run))
+        return pos[1]
+
+
+class TransformXYPosition(Block):
+    name = "transform_x_y_position"
+    messages = ["(%1:%2)"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "block_x", "X", int),
+        BlockInput(BlockInputKind.VALUE, "block_y", "Y", int),
+    ]
+    returns = Position
+    color = 300
+    tooltip = "Vytvoří (X, Y) souřadnice z X a Y"
+
+    block_x: Block
+    block_y: Block
+
+    def execute(self, run: Run) -> Position:
+        run.add_steps(1)
+        x = self.block_x.execute(run)
+        y = self.block_y.execute(run)
+        assert isinstance(x, int) and isinstance(y, int)
+        return (x, y)
+
+
+# Computations:
+
+class ComputeDistance(Block):
+    name = "compute_distance"
+    messages = ["Vzdálenost k %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "pos", "POSITION", Position),
+    ]
+    returns = int
+    color = 300
+    tooltip = "Vrátí počet kroků kovboje od současné pozice k bodu X:Y (s uvažováním překážek ale bez kovbojů)"
+
+    pos: Block
+
+    def execute(self, run: Run) -> int:
+        pos = cast(Position, self.pos.execute(run))
+        run.add_steps(1)
+        return run.map.distance_from(run.context, pos)
+
+
+class ComputeFirstStep(Block):
+    name = "compute_first_step"
+    messages = ["Kudy k %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "pos", "POSITION", Position),
+    ]
+    returns = int
+    color = 300
+    # FIXME: indexování kroků?
+    tooltip = ("Vrátí index (číslo 0, 2, 4 nebo 6) prvního kroku nejkratší cesty "
+               "pro kovboje od současné pozice k bodu X:Y (s uvažováním překážek ale bez kovbojů). ")
+
+    pos: Block
+
+    def execute(self, run: Run) -> int:
+        pos = cast(Position, self.pos.execute(run))
+        run.add_steps(1)
+        direction = run.map.which_way(run.context, pos)
+        for i, d in enumerate(all_directions):
+            if d.value == direction:
+                return i
+        return -1
+
+
+# Variables:
 
 class VariablesGet(Block):
     name = "variables_get"
@@ -278,7 +560,7 @@ class VariablesGet(Block):
         self.var.check_type(return_type)
         self.returns = return_type
 
-    def execute(self, run: Run) -> int:
+    def execute(self, run: Run) -> bool | int | Position:
         run.add_steps(1)
         return self.var.execute(run)
 
@@ -295,17 +577,19 @@ class VariablesSet(Block):
     var: VariableField
     value: Block
 
-    def __init__(self, mutation: dict[str, str | int],
+    def __init__(self, mutation: dict[str, str],
                  fields: dict[str, Field], values: dict[str, Block],
                  statements: dict[str, Block], next: Block | None) -> None:
 
         super().__init__(mutation, fields, values, statements, next)
-        if self.value.returns != Any:
+        if self.value.returns and self.value.returns != Any:
             self.var.check_type(self.value.returns)
 
-    def execute(self, run: Run) -> Action | None:
+    def execute(self, run: Run) -> Action | Position | int | None:
         run.add_steps(1)
-        run.variables[self.var.name] = self.value.execute(run)
+        ret = self.value.execute(run)
+        assert ret is not None and not isinstance(ret, Action)
+        run.variables[self.var.name] = ret
         return super().execute(run)
 
 
@@ -321,17 +605,19 @@ class MathChange(Block):
     var: VariableField
     delta: Block
 
-    def __init__(self, mutation: dict[str, str | int],
+    def __init__(self, mutation: dict[str, str],
                  fields: dict[str, Field], values: dict[str, Block],
                  statements: dict[str, Block], next: Block | None) -> None:
 
         super().__init__(mutation, fields, values, statements, next)
-        if self.delta.returns != Any:
+        if self.delta.returns and self.delta.returns != Any:
             self.var.check_type(self.delta.returns)
 
-    def execute(self, run: Run) -> Action | None:
+    def execute(self, run: Run) -> Action | Position | int | None:
         run.add_steps(1)
-        run.variables[self.var.name] += self.delta.execute(run)
+        delta = self.delta.execute(run)
+        assert isinstance(delta, int)
+        run.variables[self.var.name] += delta
         return super().execute(run)
 
 
@@ -347,7 +633,9 @@ class LogicBoolean(Block):
 
     def execute(self, run: Run) -> bool:
         run.add_steps(1)
-        return self.field.execute(run)
+        ret = self.field.execute(run)
+        assert isinstance(ret, bool)
+        return ret
 
 
 class LogicCompare(Block):
@@ -402,8 +690,9 @@ class LogicOperation(Block):
     def execute(self, run: Run) -> bool:
         run.add_steps(1)
         op = self.op.execute(run)
-        A: bool = self.block_A.execute(run)
-        B: bool = self.block_B.execute(run)
+        A = self.block_A.execute(run)
+        B = self.block_B.execute(run)
+        assert isinstance(A, bool) and isinstance(B, bool)
         if op == "AND":
             return A and B
         elif op == "OR":
@@ -438,18 +727,27 @@ class MathNumber(Block):
 
     def execute(self, run: Run) -> int:
         run.add_steps(1)
-        return self.field.execute(run)
+        ret = self.field.execute(run)
+        assert isinstance(ret, int)
+        return ret
 
 
-class MathArithmetic(Block):
-    name = "math_arithmetic"
+class MathArithmeticCustom(Block):
+    name = "math_arithmetic_custom"
+    messages = ["%2%1%3"]
     inputs = [
-        BlockInput(BlockInputKind.FIELD, "op", "OP", str, dropdown=[]),  # TODO: add dropdown
+        BlockInput(BlockInputKind.FIELD, "op", "OP", str, dropdown=[
+            ("+", "ADD"), ("-", "MINUS"), ("×", "MULTIPLY"), ("/", "DIVIDE"),
+            ("^", "POWER"), ("%", "MODULO"),
+        ]),
         BlockInput(BlockInputKind.VALUE, "block_A", "A", int),
         BlockInput(BlockInputKind.VALUE, "block_B", "B", int),
     ]
     returns = int
-    is_blockly_default = True
+    color = 220
+    tooltip = ("Provede aritmetickou operaci (+ součet, - rozdíl, × násobení, "
+               "/ celočíselné dělení, ^ umocňování, % zbytek po dělení)")
+    # is_blockly_default = True
 
     op: Field
     block_A: Block
@@ -458,8 +756,9 @@ class MathArithmetic(Block):
     def execute(self, run: Run) -> int:
         run.add_steps(1)
         op = self.op.execute(run)
-        A: int = self.block_A.execute(run)
-        B: int = self.block_B.execute(run)
+        A = self.block_A.execute(run)
+        B = self.block_B.execute(run)
+        assert isinstance(A, int) and isinstance(B, int)
         if op == "ADD":
             return A + B
         elif op == "MINUS":
@@ -467,9 +766,11 @@ class MathArithmetic(Block):
         elif op == "MULTIPLY":
             return A * B
         elif op == "DIVIDE":
-            return A / B
+            return A // B
         elif op == "POWER":
             return A ** B
+        elif op == "MODULO":
+            return A % B
         return 0  # should not happen
 
 
@@ -478,7 +779,7 @@ class MoveDirection(Block):
     messages = ["Move %1"]
     inputs = [
         BlockInput(BlockInputKind.FIELD, "direction", "DIRECTION", str, dropdown=[
-            ("←", "LEFT"), ("↑", "UP"), ("→", "RIGHT"), ("↓", "DOWN"),
+            ("←", "W"), ("↑", "N"), ("→", "E"), ("↓", "S"),
         ]),
     ]
     has_prev = True
@@ -490,15 +791,79 @@ class MoveDirection(Block):
     def execute(self, run: Run) -> Action:
         run.add_steps(1)
         direction = self.direction.execute(run)
-        if direction == "UP":
-            return Action(ActionType.MOVE, Direction.N)
-        elif direction == "RIGHT":
-            return Action(ActionType.MOVE, Direction.E)
-        elif direction == "DOWN":
-            return Action(ActionType.MOVE, Direction.S)
-        elif direction == "LEFT":
-            return Action(ActionType.MOVE, Direction.W)
+        for d in cowboy_directions:
+            if d.name == direction:
+                return Action(ActionType.MOVE, d)
         return Action(ActionType.NOP)  # should not happen
+
+
+class FireDirection(Block):
+    name = "fire_direction"
+    messages = ["Fire %1"]
+    inputs = [
+        BlockInput(BlockInputKind.FIELD, "direction", "DIRECTION", str, dropdown=[
+            ("←", "W"), ("↖", "NW"), ("↑", "N"), ("↗", "NE"),
+            ("→", "E"), ("↘", "SE"), ("↓", "S"), ("↙", "SW"),
+        ]),
+    ]
+    has_prev = True
+    color = 120
+    tooltip = "Vypálí střelu v daném směru a ukončí tah"
+
+    direction: Field
+
+    def execute(self, run: Run) -> Action:
+        run.add_steps(1)
+        direction = self.direction.execute(run)
+        for d in bullet_directions:
+            if d.name == direction:
+                return Action(ActionType.FIRE, d)
+        return Action(ActionType.NOP)  # should not happen
+
+
+class MoveDirectionByNumber(Block):
+    name = "move_direction_number"
+    messages = ["Move %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "direction", "DIRECTION", int),
+    ]
+    has_prev = True
+    color = 120
+    tooltip = ("Přesune kovboje ve směru [←,↑,→,↓] podle zadaného čísla "
+               "(počítáno modulo osmi, 0 a 1 je ←, 2 a 3 je ↑, 4 a 5 je →, 6 a 7 je ↓)")
+
+    direction: Block
+
+    def execute(self, run: Run) -> Action:
+        run.add_steps(1)
+        i = self.direction.execute(run)
+        assert isinstance(i, int)
+        if i < 0:
+            return Action(ActionType.NOP)
+        direction = cowboy_directions[(i % 8) // 2]
+        return Action(ActionType.MOVE, direction)
+
+
+class FireDirectionByNumber(Block):
+    name = "fire_direction_by_number"
+    messages = ["Fire %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "direction", "DIRECTION", int),
+    ]
+    has_prev = True
+    color = 120
+    tooltip = "Vypálí střelu ve směru [←,↖,↑,↗,→,↘,↓,↙] podle zadaného čísla (← je 0, počítá se modulo 8)"
+
+    direction: Field
+
+    def execute(self, run: Run) -> Action:
+        run.add_steps(1)
+        i = self.direction.execute(run)
+        assert isinstance(i, int)
+        if i < 0:
+            return Action(ActionType.NOP)
+        direction = bullet_directions[i % 4]
+        return Action(ActionType.FIRE, direction)
 
 
 class ControlsRepeatExt(Block):
@@ -514,10 +879,48 @@ class ControlsRepeatExt(Block):
     times: Block
     do: Block
 
-    def execute(self, run: Run) -> Action | None:
+    def execute(self, run: Run) -> Action | Position | int | None:
         times = self.times.execute(run)
+        assert isinstance(times, int)
         for i in range(times):
             run.add_steps(1)
+            ret = self.do.execute(run)
+            if ret is not None:
+                return ret
+
+        return super().execute(run)
+
+
+class ControlsFor(Block):
+    name = "controls_for"
+    inputs = [
+        BlockInput(BlockInputKind.FIELD, "var", "VAR", int, variable=True),
+        BlockInput(BlockInputKind.VALUE, "block_from", "FROM", int),
+        BlockInput(BlockInputKind.VALUE, "block_to", "TO", int),
+        BlockInput(BlockInputKind.VALUE, "block_by", "BY", int),
+        BlockInput(BlockInputKind.STATEMENT, "do", "DO"),
+    ]
+    is_blockly_default = True
+    has_prev = True
+    has_next = True
+
+    var: VariableField
+    block_from: Block
+    block_to: Block
+    block_by: Block
+    do: Block
+
+    def execute(self, run: Run) -> Action | Position | int | None:
+        start = self.block_from.execute(run)
+        to = self.block_to.execute(run)
+        by = self.block_by.execute(run)
+        assert isinstance(start, int) and isinstance(to, int) and isinstance(by, int)
+        if by == 0:
+            return None
+
+        for i in range(start, to, by):
+            run.add_steps(1)
+            run.variables[self.var.name] = i
             ret = self.do.execute(run)
             if ret is not None:
                 return ret
@@ -534,7 +937,7 @@ class ControlsIf(Block):
     conditions: list[tuple[Block, Block]]
     do_else: Block | None
 
-    def __init__(self, mutation: dict[str, str | int],
+    def __init__(self, mutation: dict[str, str],
                  fields: dict[str, Field], values: dict[str, Block],
                  statements: dict[str, Block], next: Block | None) -> None:
 
@@ -560,7 +963,7 @@ class ControlsIf(Block):
 
         self.next = next
 
-    def execute(self, run: Run) -> Action | None:
+    def execute(self, run: Run) -> Action | Position | int | None:
         run.add_steps(1)
         found = False
         ret = None
@@ -568,9 +971,10 @@ class ControlsIf(Block):
             if condition.execute(run) is True:
                 found = True
                 ret = do.execute(run)
+                break
 
         if not found and self.do_else is not None:
-            ret = do.execute(run)
+            ret = self.do_else.execute(run)
 
         if ret is not None:
             return ret
@@ -583,20 +987,49 @@ class ControlsIf(Block):
 cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ("Cykly a logika", None, [
         ControlsRepeatExt,
+        ControlsFor,
         ControlsIf,
         LogicCompare,
         LogicOperation,
         LogicNegate,
     ]),
     ("Konstanty a matematika", None, [
-        IdxParam,
         LogicBoolean,
         MathNumber,
-        MathArithmetic,
+        MathArithmeticCustom,
         # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
     ]),
-    ("Akce", None, [
+    ("Herní info", None, [
+        InfoTeam,
+        InfoIndex,
+        InfoID,
+        InfoMyPosition,
+
+        InfoGoldCount,
+        InfoGoldPosition,
+
+        InfoCowboyCount,
+        InfoCowboyTeam,
+        InfoCowboyPosition,
+
+        InfoBulletCount,
+        InfoBulletPosition,
+    ]),
+    ("Transformace", None, [
+        TransformPositionX,
+        TransformPositionY,
+        TransformXYPosition,
+    ]),
+    ("Herní výpočty", None, [
+        ComputeDistance,
+        ComputeFirstStep,
+    ]),
+    ("Herní akce", None, [
+        Nop,
         MoveDirection,
+        MoveDirectionByNumber,
+        FireDirection,
+        FireDirectionByNumber,
     ]),
     ("Proměnné", {"custom": "VARIABLE"}, [
         VariablesGet,
@@ -612,19 +1045,31 @@ cowboy_factories: dict[str, Type[Block]] = {
 bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ("Cykly a logika", None, [
         ControlsRepeatExt,
+        ControlsFor,
         ControlsIf,
         LogicCompare,
         LogicOperation,
         LogicNegate,
     ]),
     ("Konstanty a matematika", None, [
-        IdxParam,
         LogicBoolean,
         MathNumber,
-        MathArithmetic,
+        MathArithmeticCustom,
         # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
     ]),
-    ("Akce", None, [
+    ("Herní info", None, [
+        InfoTeam,
+        # InfoIndex, # bullet has no index
+        InfoID,
+        InfoMyPosition,
+    ]),
+    ("Transformace", None, [
+        TransformPositionX,
+        TransformPositionY,
+        TransformXYPosition,
+    ]),
+    ("Herní akce", None, [
+        Nop,
     ]),
     ("Proměnné", {"custom": "VARIABLE"}, [
         VariablesGet,

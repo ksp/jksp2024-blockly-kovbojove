@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from .actions import Action
-from .blocks import Block, Run, Nop
+from .blocks import Block, Run, Nop, Position
 from .exceptions import OutOfStepsException
 
 # Brake circular dependency only used for type checking
@@ -23,12 +23,14 @@ class Program:
 
     # returns (True/False, action/string error, #steps)
     def execute(self, max_steps: int, map: GameMap, context: Cowboy | Bullet) -> tuple[bool, Action | str, int]:
-        variables = {}
+        variables: dict[str, bool | int | Position] = {}
         for key, t in self.variables.items():
             if t == bool:
                 variables[key] = False
             elif t == int:
                 variables[key] = 0
+            elif t == Position:
+                variables[key] = (0, 0)
 
         run = Run(max_steps=max_steps, variables=variables, map=map, context=context)
 
