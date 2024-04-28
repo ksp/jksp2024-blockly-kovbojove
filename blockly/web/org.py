@@ -1,4 +1,4 @@
-from flask import Blueprint, flash, redirect, render_template, session, g
+from flask import Blueprint, flash, redirect, render_template, session, url_for, g
 from flask_wtf import FlaskForm  # type: ignore
 import wtforms
 
@@ -33,6 +33,27 @@ def login(next: str = "/org/"):
     return render_template('org_login.html', form=form)
 
 
-@app.route('/org/')
+class ActionForm(FlaskForm):
+    calc_cowboys = wtforms.SubmitField('Kolo kovbojů')
+    calc_bullets = wtforms.SubmitField('Kolo střel')
+
+
+@app.route('/org/', methods=('GET', 'POST'))
 def index():
-    return render_template('org_index.html')
+    action_form = ActionForm()
+    G: game.Game = g.G
+
+    if action_form.validate_on_submit():
+        if action_form.calc_cowboys.data:
+            G.map.simulate_cowboys_turn()
+            flash("Kolo kovbojů spočítáno", "success")
+
+        elif action_form.calc_bullets.data:
+            G.map.simulate_bullets_turn()
+            flash("Kolo střel spočítáno", "success")
+
+        return redirect(url_for("org.index"))
+
+    return render_template(
+        'org_index.html',
+        action_form=action_form)
