@@ -51,7 +51,8 @@ class ParserInstance:
         for variable, instances in self.variables.items():
             for instance in instances:
                 if instance.var_type is Any:
-                    raise ProgramParseException(f"Instance of variable {variable} has not determined type")
+                    # raise ProgramParseException(f"Instance of variable {variable} has not determined type")
+                    continue
                 if variable in variables and variables[variable] != instance.var_type:
                     raise ProgramParseException(f"Variable {variable} has type conflict ({variables[variable]} and {instance.var_type})")
                 variables[variable] = instance.var_type
