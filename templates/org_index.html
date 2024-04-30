@@ -6,4 +6,117 @@
 <h2>Spočítat kolo</h2>
 {{ render_form(action_form) }}
 
+<canvas id="grid_canvas" width="{{ 2 * square_half * grid_width }}" height="{{ 2 * square_half * grid_height }}"></canvas>
+
+<script>
+    const game_canvas = document.getElementById('grid_canvas');
+    const ctx = game_canvas.getContext('2d');
+
+    const width = {{ grid_width }};
+    const height = {{ grid_height }};
+    const squareHalf = {{ square_half }};
+    const squareSize = squareHalf * 2;
+
+    const walls = {{ walls }};
+    const golds = {{ golds }};
+
+    // Tmavá barva, světlá barva
+    const teamColors = {
+        "red": ["#78281f", "#f1948a"],
+        "green": ["#196f3d", "#82e0aa"],
+        "blue": ["#1a5276", "#85c1e9"],
+        "yellow": ["#9a7d0a", "#f7dc6f"]
+    };
+
+    function drawGrid() {
+        ctx.strokeStyle = '#c2c2a3';
+        for (let x = 0; x <= width; x++) {
+            ctx.beginPath();
+            ctx.moveTo(x * squareSize, 0);
+            ctx.lineTo(x * squareSize, game_canvas.height);
+            ctx.stroke();
+        }
+        for (let y = 0; y <= height; y++) {
+            ctx.beginPath();
+            ctx.moveTo(0, y * squareSize);
+            ctx.lineTo(game_canvas.width, y * squareSize);
+            ctx.stroke();
+        }
+    }
+
+    function drawWall(x, y) {
+        y = height - y - 1
+        ctx.beginPath();
+        ctx.fillStyle = "black";
+        ctx.fillRect(x * squareSize, y * squareSize, squareSize, squareSize);
+        ctx.closePath();
+    }
+
+    function drawCowboy(x, y, team) {
+        y = height - y - 1
+        let darkColor = teamColors[team][0];
+        let lightColor = teamColors[team][1];
+
+        ctx.fillStyle = lightColor;
+        ctx.beginPath();
+        ctx.ellipse((x * squareSize) + squareHalf, (y * squareSize) + squareHalf + (squareHalf / 4), squareSize / 4, squareSize / 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+
+        ctx.fillStyle = darkColor;
+        ctx.beginPath();
+        ctx.fillRect(x * squareSize + (squareSize / 8), y *  squareSize + squareHalf, squareSize * 3 / 4, squareHalf / 6);
+        ctx.fillRect(x * squareSize + (squareHalf / 2), y * squareSize + squareHalf / 2, squareHalf, squareSize / 3);
+        ctx.closePath();
+    }
+
+    function drawBullet(x, y, team) {
+        y = height - y - 1
+        ctx.fillStyle = teamColors[team][0];
+        ctx.beginPath();
+        ctx.arc((x * squareSize) + squareHalf, (y * squareSize) + squareHalf, squareHalf / 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    function drawGold(x, y) {
+        y = height - y - 1
+        const centerX = (x * squareSize) + squareHalf;
+        const centerY = (y * squareSize) + squareHalf;
+
+        ctx.fillStyle = "#f5b041";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, squareHalf * 7 / 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+
+        ctx.fillStyle = "#f7dc6f";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, squareHalf * 5 / 10, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+    }
+
+    // Draw grid with all objects.
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, game_canvas.width, game_canvas.height);
+    drawGrid();
+
+    // Walls
+    walls.forEach((w) => drawWall(w[0], w[1]));
+
+    // Golds
+    golds.forEach((g) => drawGold(g[0], g[1]));
+
+    // Cowboys
+    {% for cb in cowboys %}
+    drawCowboy({{ cb[0] }}, {{ cb[1] }}, '{{ cb[2] }}');
+    {%- endfor %}
+
+    // Bullets
+    {% for b in bullets %}
+    drawBullet({{ b[0] }}, {{ b[1] }}, '{{ b[2] }}');
+    {%- endfor %}
+</script>
+
 {% endblock %}

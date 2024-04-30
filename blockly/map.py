@@ -438,6 +438,25 @@ class GameMap:
         self.bullet_disappear(b2)
         self.current_explosions.append((x, y))
 
+    def get_state_debug(self) -> tuple[tuple[int, int], list[tuple[tuple[int, int], str]], list[tuple[tuple[int, int], str]], list[tuple[int, int]], list[tuple[int, int]]]:
+        walls = []
+        cowboys = []
+        bullets = []
+        golds = [g.position for g in self.gold_list if g.position is not None]
+
+        for r in range(self.height):
+            for c in range(self.width):
+                if self.wall_grid[r][c]:
+                    walls.append((c, r))
+        for cb in self.cowboy_list:
+            if cb.position is not None:
+                cowboys.append((cb.position, self.teams[cb.team].login))
+        for b in self.bullet_list:
+            bullets.append((b.position, self.teams[b.team].login))
+
+        grid_size = (self.width, self.height)
+        return grid_size, cowboys, bullets, walls, golds
+
     def simulate_cowboys_turn(self) -> None:
         self.current_explosions = []
         golds_to_respawn = []

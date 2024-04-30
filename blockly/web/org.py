@@ -54,6 +54,15 @@ def index():
 
         return redirect(url_for("org.index"))
 
+    grid_size, cowboys, bullets, walls, golds = G.map.get_state_debug()
+
     return render_template(
         'org_index.html',
-        action_form=action_form)
+        action_form=action_form,
+        square_half=10,
+        grid_width=grid_size[0],
+        grid_height=grid_size[1],
+        walls = [[w[0], w[1]] for w in walls],
+        golds = [[g[0], g[1]] for g in golds],
+        cowboys = [[x, y, t] for ((x, y), t) in cowboys],
+        bullets = [[x, y, t] for ((x, y), t) in bullets])
