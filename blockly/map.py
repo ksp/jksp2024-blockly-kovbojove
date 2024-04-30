@@ -1,3 +1,4 @@
+import json
 from random import randrange as rr
 from random import shuffle
 import queue
@@ -36,6 +37,7 @@ class Gold:
 
 
 class GameMap:
+    save_dir: str
     dirs_cowboy = [(-1, 0), (0, 1), (1, 0), (0, -1)]
     dirs_bullet = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
     action_dirs_list = [Direction.W, Direction.NW, Direction.N, Direction.NE, Direction.E, Direction.SE, Direction.S, Direction.SW]
@@ -65,6 +67,8 @@ class GameMap:
     # has value only during turn computation
     active_cowboys: list[Cowboy]
 
+    current_explosions: list[tuple[int, int]]
+
     # Only counts cowboy turns
     turn_idx: int
     # count bullet turns, reset with each turn_idx increase
@@ -92,6 +96,8 @@ class GameMap:
             cowboys_per_team: int = 4,
             # The number of golds on the map will be kept constant
             gold_count: int = 5,
+            load_from_file: str | None = None,
+            save_dir: str = "save",
             wall_fraction: int = 50,
             cluster_max: int = 5):
         self.width, self.height = width, height
@@ -100,7 +106,12 @@ class GameMap:
         self.cowboys_per_team = cowboys_per_team
         self.gold_count = gold_count
 
-        self.init_new(wall_fraction, cluster_max)
+        self.save_dir = save_dir
+
+        if load_from_file is not None:
+            self.load(load_from_file)
+        else:
+            self.init_new(wall_fraction, cluster_max)
 
     def init_new(self, wall_fraction: int = 50, cluster_max: int = 5):
         self.team_points = [0 for _ in range(len(self.teams))]
@@ -120,6 +131,135 @@ class GameMap:
         self.generate_walls(wall_fraction, cluster_max)
         self.generate_cowboy_positions()
         self.generate_gold_positions()
+
+    def save_filename(self, turn_idx: int, bullet_subturn: int) -> str:
+        return f"{self.save_dir}/save_{turn_idx:06d}_{bullet_subturn}.json"
+
+    def save(self) -> None:
+        walls: list[tuple[int, int]] = []
+        for r in range(self.height):
+            for c in range(self.width):
+                pos = (c, r)
+                if self.wall_grid[r][c]:
+                    walls.append(pos)
+
+        golds: list[tuple[int, int]] = [gold.position for gold in self.gold_list]
+        cowboys: list[dict] = [{
+            "team": cowboy.team,
+            "index": cowboy.index,
+            "position": cowboy.position,
+        } for cowboy in self.cowboy_list]
+        bullets: list[dict] = [{
+            "team": bullet.team,
+            "position": bullet.position,
+            "direction": bullet.direction,
+            "turns_made": bullet.turns_made,
+        } for bullet in self.bullet_list]
+
+        cowboy_indices: dict[Cowboy, int] = {
+            cowboy: i for i, cowboy in enumerate(self.cowboy_list)
+        }
+        respawn_queue: list[int, int] = [
+            (respawn_round, cowboy_indices[cowboy]) for (respawn_round, cowboy) in self.cowboy_spawn_deque
+        ]
+
+        out = {
+            "width": self.width,
+            "height": self.height,
+            "turn_idx": self.turn_idx,
+            "bullet_subturn": self.bullet_subturn,
+
+            "team_points": self.team_points,
+
+            "walls": walls,
+            "golds": golds,
+            "cowboys": cowboys,
+            "bullets": bullets,
+
+            "respawn_queue": respawn_queue,
+        }
+
+        with open(self.save_filename(self.turn_idx, self.bullet_subturn), "w") as f:
+            json.dump(out, f)
+
+    def load(self, filename: str) -> None:
+        with open(filename, "r") as f:
+            data = json.load(f)
+
+        self.width = data["width"]
+        self.height = data["height"]
+        self.turn_idx = data["turn_idx"]
+        self.bullet_subturn = data["bullet_subturn"]
+
+        self.team_points: list[int] = data["team_points"]
+        # Number of teams cannot be changed!
+        if len(self.team_points) != len(self.teams):
+            raise Exception(f"Different number of teams! ({len(self.team_points)} in '{filename}', {len(self.teams)} teams in config)")
+
+        self.wall_grid = [[False for _ in range(self.width)] for _ in range(self.height)]
+        self.gold_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.gold_list = []
+        self.cowboy_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.cowboy_list = []
+        self.bullet_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
+        self.bullet_list = []
+
+        # Always empty after load (we do not need to save explosions)
+        self.current_explosions = []
+
+        for (c, r) in data['walls']:
+            self.wall_grid[r][c] = True
+
+        # Golds:
+        for (c, r) in data['golds']:
+            gold = Gold()
+            gold.position = (c, r)
+            # Fix gold count 1/2 (when lowered)
+            if len(self.gold_list) < self.gold_count:
+                self.gold_list.append(gold)
+                self.gold_grid[r][c] = gold
+        # Fix gold count 2/2 (when new golds added)
+        while len(self.gold_list) < self.gold_count:
+            gold = Gold()
+            self.gold_list.append(gold)
+            self.spawn_gold(gold)
+
+        # Cowboys:
+        team_counts = [0 for _ in range(len(self.teams))]
+        for record in data['cowboys']:
+            pos = record["position"]
+            if pos is not None:
+                pos = tuple(pos)
+            team = record['team']
+            # Fix cowboy count 1/2 (when lowered)
+            if record['index'] < self.cowboys_per_team:
+                team_counts[team] += 1
+                cowboy = Cowboy(record['team'], record['index'], pos)
+                self.cowboy_list.append(cowboy)
+                if pos is not None:
+                    c, r = pos
+                    self.cowboy_grid[r][c] = cowboy
+        # Fix cowboy count 2/2 (when new cowboys added)
+        for i, count in enumerate(team_counts):
+            while count < self.cowboys_per_team:
+                pos = self.random_free_position()
+                cowboy = Cowboy(i, count, pos)
+                count += 1
+                self.cowboy_list.append(cowboy)
+                self.cowboy_grid[pos[1]][pos[0]] = cowboy
+
+        # Respawn queue:
+        self.cowboy_spawn_deque = deque()
+        for (respawn_round, i) in data['respawn_queue']:
+            if i < len(self.cowboy_list):
+                self.cowboy_spawn_deque.append((respawn_round, self.cowboy_list[i]))
+
+        for record in data['bullets']:
+            pos = tuple(record["position"])
+            bullet = Bullet(record['team'], pos, record['direction'], record['turns_made'])
+            self.bullet_list.append(bullet)
+            c, r = pos
+            self.bullet_grid[r][c] = bullet
 
     # `(width * height) // wall_fraction` wall clusters will be generated
     # randomly in the grid, with at most `cluster_max` wall squares each.
@@ -367,6 +507,7 @@ class GameMap:
 
         self.turn_idx += 1
         self.bullet_subturn = 0
+        self.save()
 
     def simulate_bullets_turn(self) -> None:
         # Bullets fly in order in which they are fired
@@ -411,6 +552,7 @@ class GameMap:
                 self.bullet_disappear(bullet)
 
         self.bullet_subturn += 1
+        self.save()
 
     # Methods providing information for cowboys and bullets:
     # In all cases, `context` is either a Cowboy or a Bullet object.
@@ -562,6 +704,15 @@ class GameMap:
         if i < 0 or i >= len(self.active_cowboys):
             return None
         return self.active_cowboys[i]
+
+    # The coordinates of the cowboy with currently assigned index i.
+    # Returns (-1, -1) if the index i is out of bounds.
+    def cowboy_i_position(self, i: int) -> tuple[int, int]:
+        cowboy = self.cowboy_i(i)
+        if cowboy and cowboy.position:
+            return cowboy.position
+        else:
+            return (-1, -1)
 
     # The team index of the cowboy with current index i
     # Returns -1 if i is out of bounds.
