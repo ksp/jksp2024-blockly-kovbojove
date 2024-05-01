@@ -310,6 +310,44 @@ class InfoID(Block):
         return run.map.my_id(run.context)
 
 
+class InfoMyDirection(Block):
+    name = "info_my_direction"
+    messages = ["Můj směr"]
+    returns = int
+    color = 300
+    tooltip = "Vrátí aktuální směr střely jako číslo (0 je ←, pořadí: ←,↖,↑,↗,→,↘,↓,↙)"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        bullet: Bullet = run.context
+        return bullet.direction
+
+
+class InfoMyRange(Block):
+    name = "info_my_range"
+    messages = ["Zbývá kroků"]
+    returns = int
+    color = 300
+    tooltip = "Vrátí kolik střele zbývá kroků"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        bullet: Bullet = run.context
+        return run.map.BULLET_LIFETIME - bullet.turns_made
+
+
+class InfoTurn(Block):
+    name = "info_turn"
+    messages = ["Číslo kola"]
+    returns = int
+    color = 300
+    tooltip = "Vrací číslo aktuálního kola"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.turn_idx
+
+
 class InfoMyPosition(Block):
     name = "info_position"
     messages = ["Moje pozice"]
@@ -449,7 +487,7 @@ class TransformPositionX(Block):
         BlockInput(BlockInputKind.VALUE, "block_position", "POSITION", Position),
     ]
     returns = int
-    color = 300
+    color = 30
     tooltip = "Vrátí X souřadnici z (X, Y)"
 
     block_position: Block
@@ -467,7 +505,7 @@ class TransformPositionY(Block):
         BlockInput(BlockInputKind.VALUE, "block_position", "POSITION", Position),
     ]
     returns = int
-    color = 300
+    color = 30
     tooltip = "Vrátí Y souřadnici z (X, Y)"
 
     block_position: Block
@@ -486,7 +524,7 @@ class TransformXYPosition(Block):
         BlockInput(BlockInputKind.VALUE, "block_y", "Y", int),
     ]
     returns = Position
-    color = 300
+    color = 30
     tooltip = "Vytvoří (X, Y) souřadnice z X a Y"
 
     block_x: Block
@@ -500,11 +538,77 @@ class TransformXYPosition(Block):
         return (x, y)
 
 
+class CountDistance(Block):
+    name = "count_distance"
+    messages = ["Přímá vzdálenost k %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "block_position", "POSITION", Position),
+    ]
+    returns = int
+    color = 30
+    tooltip = "Vrátí přímou vzdálenost k zadaným souřadnicím (při pohybu osmi směry)"
+
+    block_position: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        pos = cast(Position, self.block_position.execute(run))
+        return run.map.maximum_metric(run.context.position, pos)
+
+
+class GetDirection(Block):
+    name = "compute_direction"
+    messages = ["Směr k %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "pos", "POSITION", Position),
+    ]
+    returns = int
+    color = 30
+    tooltip = "Vrátí nejlepší směr (z množiny [←,↖,↑,↗,→,↘,↓,↙]) k zadaným souřadnicím. Vrací číslo, ← je 0. Výpočet je bez ohledu na zdi."
+
+    pos: Block
+
+    def execute(self, run: Run) -> int:
+        pos = cast(Position, self.pos.execute(run))
+        run.add_steps(1)
+
+        x, y = run.context.position
+        tx, ty = pos
+        dx, dy = (tx - x, ty - y)
+
+        # Wrap over the edge of the map
+        if dx > run.map.width/2:
+            dx -= run.map.width
+        elif dx < -run.map.width/2:
+            dx += run.map.width
+
+        if dy > run.map.height/2:
+            dy -= run.map.height
+        elif dy < -run.map.height/2:
+            dy += run.map.height
+
+        out_x, out_y = 0, 0
+        # if difference in one axis is more than twice the difference in the
+        # other axis -> move only in one axis
+        if abs(dy) <= 2*abs(dx):
+            out_x = 1 if dx > 0 else -1
+        if abs(dx) <= 2*abs(dy):
+            out_y = 1 if dy > 0 else -1
+        direction = (out_x, out_y)
+
+        for i, d in enumerate(bullet_directions):
+            if d.value == direction:
+                return i
+
+        print(f"ERROR in ComputeDirection: {direction} not found")
+        return -1  # Should not happen
+
+
 # Computations:
 
 class ComputeDistance(Block):
     name = "compute_distance"
-    messages = ["Vzdálenost k %1"]
+    messages = ["Počet kroků k %1"]
     inputs = [
         BlockInput(BlockInputKind.VALUE, "pos", "POSITION", Position),
     ]
@@ -522,7 +626,7 @@ class ComputeDistance(Block):
 
 class ComputeFirstStep(Block):
     name = "compute_first_step"
-    messages = ["Kudy k %1"]
+    messages = ["První krok k %1"]
     inputs = [
         BlockInput(BlockInputKind.VALUE, "pos", "POSITION", Position),
     ]
@@ -797,6 +901,39 @@ class MoveDirection(Block):
         return Action(ActionType.NOP)  # should not happen
 
 
+class BulletFly(Block):
+    name = "bullet_fly"
+    messages = ["Rovně"]
+    has_prev = True
+    color = 120
+    tooltip = "Střela nic nedělá, jen si tak letí"
+
+    def execute(self, run: Run) -> Action:
+        return Action(ActionType.NOP)
+
+
+class BulletLeft(Block):
+    name = "bullet_left"
+    messages = ["Doleva"]
+    has_prev = True
+    color = 120
+    tooltip = "Střela zatočí o 45° doleva"
+
+    def execute(self, run: Run) -> Action:
+        return Action(ActionType.BULLET_TURN_L)
+
+
+class BulletRight(Block):
+    name = "bullet_right"
+    messages = ["Doprava"]
+    has_prev = True
+    color = 120
+    tooltip = "Střela zatočí o 45° doprava"
+
+    def execute(self, run: Run) -> Action:
+        return Action(ActionType.BULLET_TURN_R)
+
+
 class FireDirection(Block):
     name = "fire_direction"
     messages = ["Fire %1"]
@@ -862,7 +999,7 @@ class FireDirectionByNumber(Block):
         assert isinstance(i, int)
         if i < 0:
             return Action(ActionType.NOP)
-        direction = bullet_directions[i % 4]
+        direction = bullet_directions[i % 8]
         return Action(ActionType.FIRE, direction)
 
 
@@ -1004,6 +1141,7 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         InfoIndex,
         InfoID,
         InfoMyPosition,
+        InfoTurn,
 
         InfoGoldCount,
         InfoGoldPosition,
@@ -1015,10 +1153,12 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         InfoBulletCount,
         InfoBulletPosition,
     ]),
-    ("Transformace", None, [
+    ("Souřadnice a transformace", None, [
         TransformPositionX,
         TransformPositionY,
         TransformXYPosition,
+        CountDistance,
+        GetDirection
     ]),
     ("Herní výpočty", None, [
         ComputeDistance,
@@ -1062,14 +1202,26 @@ bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         # InfoIndex, # bullet has no index
         InfoID,
         InfoMyPosition,
+        InfoTurn,
+        InfoMyDirection,
+        InfoMyRange,
+
+        # Bullet knows only about cowboys
+        InfoCowboyCount,
+        InfoCowboyTeam,
+        InfoCowboyPosition,
     ]),
-    ("Transformace", None, [
+    ("Souřadnice a transformace", None, [
         TransformPositionX,
         TransformPositionY,
         TransformXYPosition,
+        CountDistance,
+        GetDirection
     ]),
     ("Herní akce", None, [
-        Nop,
+        BulletFly,
+        BulletLeft,
+        BulletRight,
     ]),
     ("Proměnné", {"custom": "VARIABLE"}, [
         VariablesGet,
