@@ -22,6 +22,9 @@ class Cowboy(Context):
         # Will be None when the cowboy is shot down and waiting to respawn.
         self.position = position
 
+    def __str__(self) -> str:
+        return f"Cowboy(team={self.team},index={self.index},position={self.position})"
+
 
 class Bullet(Context):
     # `direction` is an index for dirs_bullet
@@ -30,6 +33,9 @@ class Bullet(Context):
         self.position = position
         self.direction = direction
         self.turns_made = turns_made
+
+    def __str__(self) -> str:
+        return f"Bullet(team={self.team},position={self.position},direction={self.direction},turns_made={self.turns_made})"
 
 
 class Gold:
@@ -401,6 +407,7 @@ class GameMap:
                 bfs_queue.put((dist + 1, new_pos))
         x, y = max_list[rr(len(max_list))]
         cowboy.position = (x, y)
+        print(f"GAME[INFO]: {cowboy} spawned after death")
         self.cowboy_grid[y][x] = cowboy
 
     def bullet_disappear(self, bullet: Bullet) -> None:
@@ -412,6 +419,7 @@ class GameMap:
     def bullet_hit(self, cowboy: Cowboy, bullet: Bullet):
         if cowboy.position is None or cowboy.position != bullet.position:
             return
+        print(f"GAME[INFO]: {cowboy} hit by {bullet}")
         if cowboy.team != bullet.team:
             self.team_points[bullet.team] += self.SHOTDOWN_BOUNTY
         x, y = cowboy.position
@@ -458,6 +466,7 @@ class GameMap:
 
             program = self.teams[cowboy.team].get_cowboy_program()
             status, action, steps = program.execute(self.COWBOY_MAX_STEPS, self, cowboy)
+            print(f"GAME[ACTION]: {cowboy}: status={status}, steps={steps}, result={action}")
 
             if status and action.type != ActionType.NOP and action.direction is not None:
                 # In all invalid cases, the cowboys keeps his position
