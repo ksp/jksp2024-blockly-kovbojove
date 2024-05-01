@@ -54,7 +54,7 @@ def index():
 
         return redirect(url_for("org.index"))
 
-    grid_size, cowboys, bullets, walls, golds = G.map.get_state_debug()
+    grid_size, cowboys, bullets, walls, golds, current_explosions, current_gun_triggers = G.map.get_state_debug()
 
     return render_template(
         'org_index.html',
@@ -65,4 +65,6 @@ def index():
         walls = [[w[0], w[1]] for w in walls],
         golds = [[g[0], g[1]] for g in golds],
         cowboys = [[x, y, t] for ((x, y), t) in cowboys],
-        bullets = [[x, y, t] for ((x, y), t) in bullets])
+        bullets = [[x, y, t] for ((x, y), t) in bullets],
+        explosions = [[ce[0], ce[1]] for ce in current_explosions],
+        shot_directions = [[cgt[0], cgt[1], cgt[2]] for cgt in current_gun_triggers])

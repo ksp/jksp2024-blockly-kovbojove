@@ -8,6 +8,8 @@ from typing import Callable
 from .team import Team
 from .actions import ActionType, Direction
 
+Coords = tuple[int, int]
+
 
 class Context:
     # Changes every turn
@@ -16,7 +18,7 @@ class Context:
 
 
 class Cowboy(Context):
-    def __init__(self, team: int, index: int, position: tuple[int, int] | None):
+    def __init__(self, team: int, index: int, position: Coords | None):
         self.team = team
         self.index = index
         # Will be None when the cowboy is shot down and waiting to respawn.
@@ -28,7 +30,7 @@ class Cowboy(Context):
 
 class Bullet(Context):
     # `direction` is an index for dirs_bullet
-    def __init__(self, team: int, position: tuple[int, int], direction: int, turns_made: int = 0):
+    def __init__(self, team: int, position: Coords, direction: int, turns_made: int = 0):
         self.team = team
         self.position = position
         self.direction = direction
@@ -39,7 +41,7 @@ class Bullet(Context):
 
 
 class Gold:
-    position: tuple[int, int]
+    position: Coords
 
 
 class GameMap:
@@ -73,7 +75,8 @@ class GameMap:
     # has value only during turn computation
     active_cowboys: list[Cowboy]
 
-    current_explosions: list[tuple[int, int]]
+    current_explosions: list[Coords]
+    current_gun_triggers: list[tuple[int, int, int]]
 
     # Only counts cowboy turns
     turn_idx: int
@@ -131,9 +134,10 @@ class GameMap:
         self.gold_list = [Gold() for _ in range(self.gold_count)]
         self.bullet_list = []
         self.current_explosions = []
+        self.current_gun_triggers = []
         # Deque keeping track of when dead cowboys should respawn
         self.cowboy_spawn_deque = deque()
-#
+
         self.generate_walls(wall_fraction, cluster_max)
         self.generate_cowboy_positions()
         self.generate_gold_positions()
@@ -142,14 +146,14 @@ class GameMap:
         return f"{self.save_dir}/save_{turn_idx:06d}_{bullet_subturn}.json"
 
     def save(self) -> None:
-        walls: list[tuple[int, int]] = []
+        walls: list[Coords] = []
         for r in range(self.height):
             for c in range(self.width):
                 pos = (c, r)
                 if self.wall_grid[r][c]:
                     walls.append(pos)
 
-        golds: list[tuple[int, int]] = [gold.position for gold in self.gold_list]
+        golds: list[Coords] = [gold.position for gold in self.gold_list]
         cowboys: list[dict] = [{
             "team": cowboy.team,
             "index": cowboy.index,
@@ -212,6 +216,8 @@ class GameMap:
 
         # Always empty after load (we do not need to save explosions)
         self.current_explosions = []
+        # The same goes for gun triggers
+        self.current_gun_triggers = []
 
         for (c, r) in data['walls']:
             self.wall_grid[r][c] = True
@@ -321,7 +327,7 @@ class GameMap:
 
         return reached == self.free_square_count
 
-    def random_free_position(self) -> tuple[int, int]:
+    def random_free_position(self) -> Coords:
         pos = rr(self.width), rr(self.height)
         seen = set()
         q = queue.Queue()
@@ -438,7 +444,7 @@ class GameMap:
         self.bullet_disappear(b2)
         self.current_explosions.append((x, y))
 
-    def get_state_debug(self) -> tuple[tuple[int, int], list[tuple[tuple[int, int], str]], list[tuple[tuple[int, int], str]], list[tuple[int, int]], list[tuple[int, int]]]:
+    def get_state_debug(self) -> tuple[Coords, list[tuple[Coords, str]], list[tuple[Coords, str]], list[Coords], list[Coords], list[Coords], list[tuple[int, int, int]]]:
         walls = []
         cowboys = []
         bullets = []
@@ -455,10 +461,11 @@ class GameMap:
             bullets.append((b.position, self.teams[b.team].login))
 
         grid_size = (self.width, self.height)
-        return grid_size, cowboys, bullets, walls, golds
+        return grid_size, cowboys, bullets, walls, golds, self.current_explosions, self.current_gun_triggers
 
     def simulate_cowboys_turn(self) -> None:
         self.current_explosions = []
+        self.current_gun_triggers = []
         golds_to_respawn = []
         # If any cowboys ought to be respawned, do it.
         while len(self.cowboy_spawn_deque) > 0:
@@ -513,6 +520,7 @@ class GameMap:
 
                 elif action.type == ActionType.FIRE:
                     self.team_points[cowboy.team] -= self.BULLET_PRICE
+                    self.current_gun_triggers.append((x, y, self.action_dirs_dict[d]))
 
                     print(f"GAME[ACTION]: Fired bullet at {new_x},{new_y} with direction {d}")
 
@@ -538,6 +546,7 @@ class GameMap:
         self.save()
 
     def simulate_bullets_turn(self) -> None:
+        self.current_explosions = []
         # Bullets fly in order in which they are fired
         # Make copy of the list to not skip any when bullet_list is modified
         bullets_order = self.bullet_list.copy()
@@ -591,12 +600,12 @@ class GameMap:
 
     # The objects coordinates on the map.
     # Returns (-1, -1) if the object is no longer valid.
-    def my_position(self, context: Cowboy | Bullet) -> tuple[int, int]:
+    def my_position(self, context: Cowboy | Bullet) -> Coords:
         return (-1, -1) if context is None or context.position is None else context.position
 
     # Returns a grid of computed distances from start.
     # Both `distance_from` and `which_way` can then compute what they need
-    def a_star(self, start: tuple[int, int], goal: tuple[int, int], dirs: list[tuple[int, int]], metric: Callable[[tuple[int, int], tuple[int, int]], int]) -> list[list[int]]:
+    def a_star(self, start: Coords, goal: Coords, dirs: list[Coords], metric: Callable[[Coords, Coords], int]) -> list[list[int]]:
         self.infty = 2 * self.width * self.height
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
         pq = queue.PriorityQueue()
@@ -619,20 +628,20 @@ class GameMap:
 
     # This is a method (rather than a separate function) because it depends on width and height
     # (the playfield is a toroid)
-    def coord_diffs(self, start: tuple[int, int], goal: tuple[int, int]) -> tuple[int, int]:
+    def coord_diffs(self, start: Coords, goal: Coords) -> Coords:
         x_dif = min(goal[0] - start[0], (self.width + start[0]) - goal[0]) if start[0] < goal[0] else min(start[0] - goal[0], (self.width + goal[0]) - start[0])
         y_dif = min(goal[1] - start[1], (self.width + start[1]) - goal[1]) if start[1] < goal[1] else min(start[1] - goal[1], (self.width + goal[1]) - start[1])
         return (x_dif, y_dif)
 
-    def manhattan_metric(self, start: tuple[int, int], goal: tuple[int, int]) -> int:
+    def manhattan_metric(self, start: Coords, goal: Coords) -> int:
         return sum(self.coord_diffs(start, goal))
 
-    def maximum_metric(self, start: tuple[int, int], goal: tuple[int, int]) -> int:
+    def maximum_metric(self, start: Coords, goal: Coords) -> int:
         return max(self.coord_diffs(start, goal))
 
     # Returns the length of the shortest path of the object to (x, y).
     # If unreachable, returns a sort of "infinite" value
-    def distance_from(self, context: Cowboy | Bullet, pos: tuple[int, int]) -> int:
+    def distance_from(self, context: Cowboy | Bullet, pos: Coords) -> int:
         x, y = pos
         if context is None or x < 0 or x >= self.width or y < 0 or y >= self.height:
             return self.width * self.height
@@ -646,7 +655,7 @@ class GameMap:
         return distances[y][x]
 
     # Returns the direction (index of direction) of the first step to (x, y).
-    def which_way(self, context: Cowboy | Bullet, pos: tuple[int, int]) -> tuple[int, int]:
+    def which_way(self, context: Cowboy | Bullet, pos: Coords) -> Coords:
         x, y = pos
         if context.position == (x, y):
             return (0, 0)
@@ -684,7 +693,7 @@ class GameMap:
 
     # The coordinates of the i-th currently present gold on the map.
     # Returns (-1, -1) if the index i is out of bounds.
-    def gold_i_position(self, i: int) -> tuple[int, int]:
+    def gold_i_position(self, i: int) -> Coords:
         idx = 0
         for gold in self.gold_list:
             if gold.position is not None:
@@ -738,7 +747,7 @@ class GameMap:
 
     # The coordinates of the cowboy with currently assigned index i.
     # Returns (-1, -1) if the index i is out of bounds.
-    def cowboy_i_position(self, i: int) -> tuple[int, int]:
+    def cowboy_i_position(self, i: int) -> Coords:
         cowboy = self.cowboy_i(i)
         if cowboy and cowboy.position:
             return cowboy.position
