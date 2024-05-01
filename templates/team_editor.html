@@ -2,7 +2,7 @@
 {% block head %}
 <script src="{{ url_for('static', filename='lib/blockly.min.js') }}"></script>
 {% endblock %}
-{% block title %}Kovboj{% endblock %}
+{% block title %}{{ entity_name }}{% endblock %}
 {% block body %}
 </main>
 <div id="blocklyDiv" style="height: 70vh; width: 100%;"></div>
@@ -55,19 +55,63 @@ var workspace = Blockly.inject('blocklyDiv', {
     toolbox: {{ toolbox | tojson(indent=4) | indent(width=16) }}
 });
 
+var unsavedChanges = false;
+
+window.addEventListener("beforeunload", function (e) {
+    if (!unsavedChanges) {
+        return undefined;
+    }
+
+    var confirmationMessage = 'Máte neuložené změny, chcete skutečně opustit stránku?';
+
+    (e || window.event).returnValue = confirmationMessage; //Gecko + IE
+    return confirmationMessage; //Gecko + Webkit, Safari, Chrome etc.
+});
+
 Blockly.defineBlocksWithJsonArray({{ custom_blocks | tojson(indent=4) | indent(width=8) }});
 
+workspace.addChangeListener(function( event ) {
+    if (["click", "selected", "drag", "toolbox_item_select"].includes(event.type)) {
+        return;
+    }
+    if (event.type == "finished_loading") {
+        unsavedChanges = false;
+        return;
+    }
+    console.log(event);
+    unsavedChanges = true;
+});
+
 function loadNew() {
+    if (unsavedChanges) {
+        if (!confirm("Máte neuložené změny, chcete načíst nový program a neuložené změny zahodit?")) {
+            return;
+        }
+    }
+
     gEditorUUID = null;
     elName.value = "";
     elDescription.value = "";
     elProgramSave.disabled = true;
     workspace.clear();
     window.scrollTo(0, 0);
+    unsavedChanges = false;
+}
+
+function markActiveRow(uuid) {
+    var rows = document.querySelectorAll(".program-row");
+    rows.forEach(row => row.classList.remove('table-primary'));
+    document.getElementById('row-'+uuid).classList.add('table-primary');
 }
 
 async function loadProgram(uuid) {
-    fetch('/api/cowboy/' + uuid + '/code')
+    if (unsavedChanges) {
+        if (!confirm("Máte neuložené změny, chcete načíst nový program a neuložené změny zahodit?")) {
+            return;
+        }
+    }
+
+    fetch('/api/{{ entity }}/' + uuid + '/code')
     .then(response => response.text())
     .then(code => {
         gEditorUUID = uuid;
@@ -77,10 +121,8 @@ async function loadProgram(uuid) {
 
         Blockly.Xml.clearWorkspaceAndLoadFromXml(Blockly.utils.xml.textToDom(code), workspace);
         window.scrollTo(0, 0);
+        markActiveRow(uuid);
 
-        var rows = document.querySelectorAll(".program-row");
-        rows.forEach(row => row.classList.remove('table-primary'));
-        document.getElementById('row-'+uuid).classList.add('table-primary');
     }).catch(error => {
         bootstrap_alert(elListAlert, "danger", "<strong>Chyba při nahrávání programu:</strong> "+error['error']);
     });
@@ -91,7 +133,7 @@ async function deleteProgram(uuid) {
         return;
     }
 
-    return fetch('/api/cowboy/' + uuid, {
+    return fetch('/api/{{ entity }}/' + uuid, {
         method: 'DELETE'
     }).then(response => {
         if (response.ok) {
@@ -106,7 +148,7 @@ async function deleteProgram(uuid) {
 }
 
 async function setActive(uuid) {
-    return fetch('/api/cowboy/' + uuid + '/active', {
+    return fetch('/api/{{ entity }}/' + uuid + '/active', {
         method: 'POST'
     }).then(response => {
         if (response.ok) {
@@ -121,7 +163,7 @@ async function setActive(uuid) {
 }
 
 async function reloadList() {
-    return fetch('/api/cowboy')
+    return fetch('/api/{{ entity }}')
     .then(response => response.json())
     .then(programs => {
         var newList = document.createElement("tbody");
@@ -154,6 +196,10 @@ async function reloadList() {
             actions.innerHTML = buttons;
         });
         elProgramList.innerHTML = newList.innerHTML;
+
+        if (gEditorUUID) {
+            markActiveRow(gEditorUUID);
+        }
     });
 }
 
@@ -171,7 +217,7 @@ async function saveProgram(overwrite) {
         data['uuid'] = gEditorUUID;
     }
 
-    fetch('/api/cowboy', {
+    fetch('/api/{{ entity }}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -188,6 +234,7 @@ async function saveProgram(overwrite) {
         gEditorUUID = resp['uuid'];
         elProgramSave.disabled = false;
         reloadList();
+        unsavedChanges = false;
     }).catch(err => {
         bootstrap_alert(elEditorAlert, "danger", "<strong>Neuloženo!</strong> "+err.message);
     });
@@ -202,48 +249,5 @@ reloadList()
         }
     });
 })
-
-
-    // Blockly.Blocks['comparison'] = {
-    //     init: function() {
-    //         this.appendValueInput("A")
-    //             .setCheck("Number");
-    //         this.appendDummyInput()
-    //             .appendField(new Blockly.FieldDropdown([
-    //                 ["≤", "LE"],
-    //                 ["<", "LT"],
-    //                 ["=", "EQ"]
-    //             ]), "OPERATOR");
-    //         this.appendValueInput("B")
-    //             .setCheck("Number");
-    //         this.setInputsInline(true);
-    //         this.setOutput(true, "Boolean");
-    //         this.setColour(10);
-    //         this.setTooltip("");
-    //         this.setHelpUrl("");
-    //     }
-    // };
-
-    // Blockly.Blocks['arithmetic'] = {
-    //     init: function() {
-    //         this.appendValueInput("A")
-    //             .setCheck("Number");
-    //         this.appendDummyInput()
-    //             .appendField(new Blockly.FieldDropdown([
-    //                 ["+", "PLUS"],
-    //                 ["-", "MIN"],
-    //                 ["×", "MULT"],
-    //                 ["÷", "DIV"],
-    //                 ["%", "MOD"]
-    //             ]), "OPERATOR");
-    //         this.appendValueInput("B")
-    //             .setCheck("Number");
-    //         this.setInputsInline(true);
-    //         this.setOutput(true, "Number");
-    //         this.setColour(230);
-    //         this.setTooltip("");
-    //         this.setHelpUrl("");
-    //         }
-    //     };
 </script>
 {% endblock %}

@@ -29,7 +29,8 @@ def get_menu():
     elif g.team:
         items = [
             MenuItem(url_for('team.index'), "Přehled"),
-            MenuItem(url_for('team.cowboy_editor'), "Kovboj"),
+            MenuItem(url_for('team.editor', entity="cowboy"), "Kovboj"),
+            MenuItem(url_for('team.editor', entity="bullet"), "Střela"),
         ]
 
     else:

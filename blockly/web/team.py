@@ -8,7 +8,7 @@ from uuid import uuid4
 from blockly import game
 from blockly.team import Team
 from blockly.parser import Parser
-from blockly.blocks import cowboy_blocks, cowboy_factories
+from blockly.blocks import bullet_blocks, bullet_factories, cowboy_blocks, cowboy_factories
 
 app = Blueprint('team', __name__)
 
@@ -47,11 +47,20 @@ def index():
     return render_template('team_index.html')
 
 
-@app.route('/cowboy-editor')
-def cowboy_editor():
+@app.route('/<string:entity>-editor')
+def editor(entity: str):
+    if entity == "cowboy":
+        entity_name = "Kovboj"
+        blocks = cowboy_blocks
+    elif entity == "bullet":
+        entity_name = "Střela"
+        blocks = bullet_blocks
+    else:
+        raise NotFound()
+
     custom_blocks = []
     toolbox_categories = []
-    for (name, special, blocks) in cowboy_blocks:
+    for (name, special, blocks) in blocks:
         category = {
             "kind": "category",
             "name": name
@@ -73,24 +82,32 @@ def cowboy_editor():
     }
 
     return render_template(
-        'team_cowboy.html',
+        'team_editor.html',
+        entity=entity, entity_name=entity_name,
         toolbox=toolbox, custom_blocks=custom_blocks,
     )
 
 
-@app.route('/api/cowboy', methods=['GET'])
-def get_cowboys():
+@app.route('/api/<string:entity>', methods=['GET'])
+def get_programs(entity: str):
     team: Team = g.team
-    active = team.active_cowboy
-    cowboys = team.cowboy_programs
+
+    if entity == "cowboy":
+        active = team.active_cowboy
+        programs = team.cowboy_programs
+    elif entity == "bullet":
+        active = team.active_bullet
+        programs = team.bullet_programs
+    else:
+        raise NotFound()
 
     out = []
-    for uuid, cowboy in cowboys.items():
+    for uuid, program in programs.items():
         out.append({
             "uuid": uuid,
-            "name": cowboy.name,
-            "description": cowboy.description,
-            "last_modified": cowboy.last_modified,
+            "name": program.name,
+            "description": program.description,
+            "last_modified": program.last_modified,
             "active": uuid == active
         })
 
@@ -99,43 +116,76 @@ def get_cowboys():
     return jsonify(out)
 
 
-@app.route('/api/cowboy/<string:uuid>/code', methods=['GET'])
-def get_cowboy_code(uuid: str):
+@app.route('/api/<string:entity>/<string:uuid>/code', methods=['GET'])
+def get_program_code(entity: str, uuid: str):
     team: Team = g.team
-    program_info = team.cowboy_programs.get(uuid)
+
+    if entity == "cowboy":
+        programs = team.cowboy_programs
+    elif entity == "bullet":
+        programs = team.bullet_programs
+    else:
+        raise NotFound()
+
+    program_info = programs.get(uuid)
     if program_info is None:
         raise NotFound()
     return Response(program_info.program.raw_xml, mimetype='text/xml')
 
 
-@app.route('/api/cowboy/<string:uuid>/active', methods=['POST'])
-def cowboy_set_active(uuid: str):
+@app.route('/api/<string:entity>/<string:uuid>/active', methods=['POST'])
+def set_active_program(entity: str, uuid: str):
     team: Team = g.team
-    program_info = team.cowboy_programs.get(uuid)
-    if program_info is None:
+
+    if entity == "cowboy":
+        program_info = team.cowboy_programs.get(uuid)
+        if program_info is None:
+            raise NotFound()
+        team.set_active_cowboy(uuid)
+    elif entity == "bullet":
+        program_info = team.bullet_programs.get(uuid)
+        if program_info is None:
+            raise NotFound()
+        team.set_active_bullet(uuid)
+    else:
         raise NotFound()
-    team.set_active_cowboy(uuid)
 
     return jsonify({'ok': 'ok'})
 
 
-@app.route('/api/cowboy/<string:uuid>', methods=['DELETE'])
-def delete_cowboy(uuid: str):
+@app.route('/api/<string:entity>/<string:uuid>', methods=['DELETE'])
+def delete_program(entity: str, uuid: str):
     team: Team = g.team
-    program_info = team.cowboy_programs.get(uuid)
-    active = team.active_cowboy
+
+    if entity == "cowboy":
+        program_info = team.cowboy_programs.get(uuid)
+        active = team.active_cowboy
+        d_func = team.delete_cowboy
+    elif entity == "bullet":
+        program_info = team.bullet_programs.get(uuid)
+        active = team.active_bullet
+        d_func = team.delete_bullet
+    else:
+        raise NotFound()
 
     if program_info is None:
-        return jsonify({'error': 'Kovboj neexistuje'}), 404
+        return jsonify({'error': 'Program neexistuje'}), 404
     elif uuid == active:
-        return jsonify({'error': 'Nelze smazat aktivního kovboje'}), 400
+        return jsonify({'error': 'Nelze smazat aktivní program'}), 400
     else:
-        team.delete_cowboy(uuid)
+        d_func(uuid)
         return jsonify({'ok': 'ok'})
 
 
-@app.route('/api/cowboy', methods=['POST'])
-def set_cowboy():
+@app.route('/api/<string:entity>', methods=['POST'])
+def set_program(entity: str):
+    if entity == "cowboy":
+        factories = cowboy_factories
+    elif entity == "bullet":
+        factories = bullet_factories
+    else:
+        raise NotFound()
+
     # Everything comes inside JSON
     data = request.json
     if "uuid" not in data:
@@ -152,20 +202,24 @@ def set_cowboy():
     description = data.get("description", "")
 
     try:
-        parser = Parser(cowboy_factories)
+        parser = Parser(factories)
         program = parser.parse_program(data.get("program"))
     except Exception as e:
         return jsonify({'error': f'Problém při parsování programu: {e}'}), 400
 
     team: Team = g.team
-    cowboy = team.save_cowboy(uuid, name, description, program)
-    active = team.active_cowboy
+    if entity == "cowboy":
+        program = team.save_cowboy(uuid, name, description, program)
+        active = team.active_cowboy
+    elif entity == "bullet":
+        program = team.save_bullet(uuid, name, description, program)
+        active = team.active_bullet
 
     return jsonify({
         "uuid": uuid,
-        "name": cowboy.name,
-        "description": cowboy.description,
-        "last_modified": cowboy.last_modified,
+        "name": program.name,
+        "description": program.description,
+        "last_modified": program.last_modified,
         "active": uuid == active
     })
 
