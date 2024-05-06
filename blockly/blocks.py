@@ -286,6 +286,18 @@ class InfoTeam(Block):
         return run.context.team
 
 
+class InfoPoints(Block):
+    name = "info_points"
+    messages = ["Počet bodů"]
+    returns = int
+    color = 340
+    tooltip = "Počet bodů mého týmu (int)"
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        return run.map.my_points(run.context)
+
+
 class InfoIndex(Block):
     name = "info_index"
     messages = ["Můj index"]
@@ -1138,6 +1150,7 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ]),
     ("Herní info", None, [
         InfoTeam,
+        InfoPoints,
         InfoIndex,
         InfoID,
         InfoMyPosition,
@@ -1199,6 +1212,7 @@ bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ]),
     ("Herní info", None, [
         InfoTeam,
+        InfoPoints,
         # InfoIndex, # bullet has no index
         InfoID,
         InfoMyPosition,

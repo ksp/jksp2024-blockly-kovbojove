@@ -708,6 +708,9 @@ class GameMap:
     def my_team(self, context: Cowboy | Bullet) -> int:
         return context.team
 
+    def my_points(self, context: Cowboy | Bullet) -> int:
+        return self.team_points[context.team]
+
     # Helper
     def cowboy_i(self, i: int) -> Cowboy | None:
         if i < 0 or i >= len(self.active_cowboys):
