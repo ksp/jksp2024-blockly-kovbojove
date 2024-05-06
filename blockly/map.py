@@ -3,6 +3,7 @@ from random import randrange as rr
 from random import shuffle
 import queue
 from collections import deque
+import time
 from typing import Callable
 
 from .team import Team
@@ -464,6 +465,9 @@ class GameMap:
         return grid_size, cowboys, bullets, walls, golds, self.current_explosions, self.current_gun_triggers
 
     def simulate_cowboys_turn(self) -> None:
+        start_time = time.time()
+        self.a_star_time = 0
+
         self.current_explosions = []
         self.current_gun_triggers = []
         golds_to_respawn = []
@@ -545,7 +549,12 @@ class GameMap:
         self.bullet_subturn = 0
         self.save()
 
+        elapsed = time.time() - start_time
+        print(f"GAME[TURN] Cowboy turn {self.turn_idx - 1} completed in {elapsed}s (a-star time: {self.a_star_time}s)")
+
     def simulate_bullets_turn(self) -> None:
+        start_time = time.time()
+
         self.current_explosions = []
         # Bullets fly in order in which they are fired
         # Make copy of the list to not skip any when bullet_list is modified
@@ -591,6 +600,9 @@ class GameMap:
         self.bullet_subturn += 1
         self.save()
 
+        elapsed = time.time() - start_time
+        print(f"GAME[TURN] Bullet subturn {self.turn_idx}:{self.bullet_subturn - 1} completed in {elapsed}s")
+
     # Methods providing information for cowboys and bullets:
     # In all cases, `context` is either a Cowboy or a Bullet object.
 
@@ -606,6 +618,8 @@ class GameMap:
     # Returns a grid of computed distances from start.
     # Both `distance_from` and `which_way` can then compute what they need
     def a_star(self, start: Coords, goal: Coords, dirs: list[Coords], metric: Callable[[Coords, Coords], int]) -> list[list[int]]:
+        start_time = time.time()
+
         self.infty = 2 * self.width * self.height
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
         pq = queue.PriorityQueue()
@@ -616,6 +630,7 @@ class GameMap:
                 continue
             dists_from_start[y][x] = dist
             if (x, y) == goal:
+                self.a_star_time += time.time() - start_time
                 return dists_from_start
             for d in dirs:
                 new_coords = (x + d[0]) % self.width, (y + d[1]) % self.height
@@ -624,6 +639,7 @@ class GameMap:
                 pq.put((new_priority, (new_dist, new_coords)))
 
         print("A* didn't reach the goal.")
+        self.a_star_time += time.time() - start_time
         return dists_from_start
 
     # This is a method (rather than a separate function) because it depends on width and height
