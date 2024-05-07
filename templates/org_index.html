@@ -24,21 +24,16 @@
     </div>
 </form>
 
-<canvas id="grid_canvas" width="{{ 2 * square_half * grid_width }}" height="{{ 2 * square_half * grid_height }}"></canvas>
+<canvas id="grid_canvas" width="800px"></canvas>
 
 <script>
     const game_canvas = document.getElementById('grid_canvas');
-    const ctx = game_canvas.getContext('2d');
 
-    const width = {{ grid_width }};
-    const height = {{ grid_height }};
-    const squareHalf = {{ square_half }};
-    const squareSize = squareHalf * 2;
-
-    const walls = {{ walls }};
-    const golds = {{ golds }};
-    const explosions = {{ explosions }};
-    const shotDirs = {{ shot_directions }};
+    var ctx;
+    var width;
+    var height;
+    var squareHalf;
+    var squareSize;
 
     // Hat color, "face" color.
     const teamColors = {
@@ -150,7 +145,7 @@
     function drawFiringArrow(x, y, direction) {
         x = squareSize * x;
         y = squareSize * (height - y - 1);
-        
+
         ctx.beginPath();
         switch (direction) {
             // W
@@ -209,32 +204,80 @@
         ctx.fill();
     }
 
-    // Draw grid with all objects.
-    ctx.fillStyle = "white";
-    ctx.fillRect(0, 0, game_canvas.width, game_canvas.height);
-    drawGrid();
+    function drawMap(data) {
+        width = data["width"];
+        height = data["height"];
+        squareSize = game_canvas.width / width;
+        squareHalf = squareSize / 2;
 
-    // Walls
-    walls.forEach((w) => drawWall(w[0], w[1]));
+        if (game_canvas.height != squareSize * height) {
+            console.log("CHANGED HEIGHT");
+            game_canvas.height = squareSize * height;
+        }
 
-    // Golds
-    golds.forEach((g) => drawGold(g[0], g[1]));
+        ctx = game_canvas.getContext('2d');
 
-    // Cowboys
-    {% for cb in cowboys %}
-    drawCowboy({{ cb[0] }}, {{ cb[1] }}, '{{ cb[2] }}');
-    {%- endfor %}
+        // Clear canvas
+        ctx.clearRect(0, 0, game_canvas.width, game_canvas.height);
 
-    // Bullets
-    {% for b in bullets %}
-    drawBullet({{ b[0] }}, {{ b[1] }}, '{{ b[2] }}');
-    {%- endfor %}
+        // Draw all
+        drawGrid();
 
-    // Draw shooting directions:
-    shotDirs.forEach((sd) => drawFiringArrow(sd[0], sd[1], sd[2]));
+        // Walls
+        data["walls"].forEach((w) => drawWall(w[0], w[1]));
 
-    // Explosions
-    explosions.forEach((e) => drawExplosion(e[0], e[1]));
+        // Golds
+        data["golds"].forEach((g) => drawGold(g[0], g[1]));
+
+        // Cowboys
+        data["cowboys"].forEach((cb) => {
+            // console.log(cb);
+            drawCowboy(cb[0][0], cb[0][1], cb[1]);
+        });
+
+        // Bullets
+        data["bullets"].forEach((b) => {
+            // console.log(b);
+            drawBullet(b[0][0], b[0][1], b[1]);
+        });
+
+        // Draw shooting directions:
+        data["shot_directions"].forEach((sd) => drawFiringArrow(sd[0], sd[1], sd[2]));
+
+        // Explosions
+        data["explosions"].forEach((e) => drawExplosion(e[0], e[1]));
+    }
+
+    // draw initial state
+    drawMap({{ map_state | tojson }});
+
+    var wsProtocol = 'ws://';
+    if (window.location.protocol === 'https:') {
+        wsProtocol = 'wss://';
+    }
+
+    function connect_ws() {
+        const socket = new WebSocket(wsProtocol + location.host + '/org/ws/map');
+        socket.onmessage = function(ev) {
+            data = JSON.parse(ev.data);
+            if (data["type"] == "map") {
+                showScore(data["data"]["points"], game_score);
+                drawMap(data["data"], game_canvas);
+            }
+        };
+        socket.onclose = function(e) {
+            console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+            setTimeout(function() {
+                connect_ws();
+            }, 1000);
+        };
+        socket.onerror = function(err) {
+            console.error('Socket encountered error: ', err.message, 'Closing socket');
+            ws.close();
+        };
+    }
+
+    connect_ws();
 </script>
 
 {% endblock %}

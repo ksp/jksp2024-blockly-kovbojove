@@ -1,7 +1,8 @@
-from flask import Blueprint, flash, redirect, render_template, session, url_for, g
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for, g
 from flask_wtf import FlaskForm  # type: ignore
 import wtforms
 from wtforms import validators
+from simple_websocket import Server, ConnectionClosed
 
 from blockly import game
 
@@ -89,18 +90,25 @@ def index():
     timer_form.bullet_turn_period.data = G.timer_bullet_turn_period
     timer_form.bullet_turns.data = G.timer_bullet_turns
 
-    grid_size, cowboys, bullets, walls, golds, current_explosions, current_gun_triggers = G.map.get_state_debug()
-
     return render_template(
         'org_index.html',
         action_form=action_form,
         timer_form=timer_form,
-        square_half=10,
-        grid_width=grid_size[0],
-        grid_height=grid_size[1],
-        walls = [[w[0], w[1]] for w in walls],
-        golds = [[g[0], g[1]] for g in golds],
-        cowboys = [[x, y, t] for ((x, y), t) in cowboys],
-        bullets = [[x, y, t] for ((x, y), t) in bullets],
-        explosions = [[ce[0], ce[1]] for ce in current_explosions],
-        shot_directions = [[cgt[0], cgt[1], cgt[2]] for cgt in current_gun_triggers])
+        map_state=G.map.get_state(),
+    )
+
+
+@app.route('/org/ws/map', websocket=True)
+def ws_map():
+    ws = Server.accept(request.environ)
+
+    G: game.Game = g.G
+    G.ws_connect(ws)
+    try:
+        while True:
+            data = ws.receive()
+            ws.send(data)
+    except ConnectionClosed:
+        G.ws_disconnect(ws)
+
+    return ''

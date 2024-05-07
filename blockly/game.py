@@ -1,3 +1,5 @@
+import json
+from simple_websocket import Server
 from threading import Timer, Lock
 import time
 
@@ -19,6 +21,8 @@ class Game:
     timer_bullet_turn_period: float
     timer_bullet_turns: int  # how many bullet turns after each cowboy turn
 
+    map_listeners: list[Server]
+
     def __init__(self, teams: list[Team], map: GameMap, org_login: str, org_passwd: str) -> None:
         self.teams = teams
         self.teamsMap = {team.login: team for team in teams}
@@ -29,6 +33,8 @@ class Game:
         self.timer_cowboy_turn_period = 3
         self.timer_bullet_turn_period = 0.2
         self.timer_bullet_turns = 3
+
+        self.map_listeners = []
 
         self.lock = Lock()
 
@@ -50,6 +56,14 @@ class Game:
             self.timer.cancel()
             self.timer = None
 
+    def _timer_notify_listeners(self) -> None:
+        msg = json.dumps({
+            "type": "map",
+            "data": self.map.get_state(),
+        })
+        for listener in self.map_listeners:
+            listener.send(msg)
+
     def _timer_do(self) -> None:
         """Compute one cowboy turn and then `timerBulletTurns` bullet turns."""
         cowboy_start = time.time()
@@ -58,7 +72,7 @@ class Game:
         self.map.simulate_cowboys_turn()
         self.lock.release()
 
-        # TODO: notify viewers through websocket about completed turn
+        self._timer_notify_listeners()
 
         bullet_start = time.time()
         for i in range(1, self.timer_bullet_turns + 1):
@@ -69,7 +83,7 @@ class Game:
             self.map.simulate_bullets_turn()
             self.lock.release()
 
-            # TODO: notify
+            self._timer_notify_listeners()
 
         # Plan timer (only if it wasn't cancelled in meantime)
         self.lock.acquire()
@@ -78,6 +92,12 @@ class Game:
             self.timer = Timer(remaining, self._timer_do)
             self.timer.start()
         self.lock.release()
+
+    def ws_connect(self, ws: Server):
+        self.map_listeners.append(ws)
+
+    def ws_disconnect(self, ws: Server):
+        self.map_listeners.remove(ws)
 
 
 # global singleton (to be overwritten externally)

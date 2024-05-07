@@ -445,7 +445,7 @@ class GameMap:
         self.bullet_disappear(b2)
         self.current_explosions.append((x, y))
 
-    def get_state_debug(self) -> tuple[Coords, list[tuple[Coords, str]], list[tuple[Coords, str]], list[Coords], list[Coords], list[Coords], list[tuple[int, int, int]]]:
+    def get_state(self) -> dict[str, list[tuple[Coords, str] | list[Coords]]]:
         walls = []
         cowboys = []
         bullets = []
@@ -461,8 +461,19 @@ class GameMap:
         for b in self.bullet_list:
             bullets.append((b.position, self.teams[b.team].login))
 
-        grid_size = (self.width, self.height)
-        return grid_size, cowboys, bullets, walls, golds, self.current_explosions, self.current_gun_triggers
+        return {
+            "width": self.width,
+            "height": self.height,
+            "cowboys": cowboys,
+            "bullets": bullets,
+            "walls": walls,
+            "golds": golds,
+            "explosions": self.current_explosions,
+            "shot_directions": self.current_gun_triggers,
+            'points': [
+                (team.login, self.team_points[i]) for (i, team) in enumerate(self.teams)
+            ],
+        }
 
     def simulate_cowboys_turn(self) -> None:
         start_time = time.time()
