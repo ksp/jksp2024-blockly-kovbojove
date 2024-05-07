@@ -30,8 +30,8 @@ class Game:
         self.org_login = org_login
         self.org_passwd = org_passwd
 
-        self.timer_cowboy_turn_period = 3
-        self.timer_bullet_turn_period = 0.2
+        self.timer_cowboy_turn_period = 1
+        self.timer_bullet_turn_period = 0.3
         self.timer_bullet_turns = 3
 
         self.map_listeners = []

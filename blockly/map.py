@@ -93,16 +93,16 @@ class GameMap:
     # Points taken for shooting
     BULLET_PRICE = 1
     # Points for reaching a coin.
-    GOLD_PRICE = 3
+    GOLD_PRICE = 10
     # Points for shooting down an enemy cowboy.
-    SHOTDOWN_BOUNTY = 10
+    SHOTDOWN_BOUNTY = 5
     # No. of turns between a cowboy being shot down and him respawning.
-    TURNS_TO_RESPAWN = 10
+    TURNS_TO_RESPAWN = 5
     # For how many total (bullet) turns does a bullet object exist?
-    BULLET_LIFETIME = 15
+    BULLET_LIFETIME = 9
     # Maximum program lengths:
-    COWBOY_MAX_STEPS = 3000
-    BULLET_MAX_STEPS = 300
+    COWBOY_MAX_STEPS = 6000
+    BULLET_MAX_STEPS = 2000
 
     def __init__(
             self,
