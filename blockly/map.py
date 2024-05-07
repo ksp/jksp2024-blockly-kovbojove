@@ -79,6 +79,10 @@ class GameMap:
     current_explosions: list[Coords]
     current_gun_triggers: list[tuple[int, int, int]]
 
+    # At each cowboy turn, once we compute a cowboy's BFS, we cache
+    # the distances.
+    cached_distances: dict[Coords, list[list[int]]]
+
     # Only counts cowboy turns
     turn_idx: int
     # count bullet turns, reset with each turn_idx increase
@@ -115,6 +119,8 @@ class GameMap:
         self.teams = teams
         self.cowboys_per_team = cowboys_per_team
         self.gold_count = gold_count
+
+        self.cached_distances = {}
 
         self.save_dir = save_dir
 
@@ -477,7 +483,7 @@ class GameMap:
 
     def simulate_cowboys_turn(self) -> None:
         start_time = time.time()
-        self.a_star_time = 0
+        self.bfs_time = 0
 
         self.current_explosions = []
         self.current_gun_triggers = []
@@ -561,7 +567,7 @@ class GameMap:
         self.save()
 
         elapsed = time.time() - start_time
-        print(f"GAME[TURN] Cowboy turn {self.turn_idx - 1} completed in {elapsed}s (a-star time: {self.a_star_time}s)")
+        print(f"GAME[TURN] Cowboy turn {self.turn_idx - 1} completed in {elapsed}s (bfs time: {self.bfs_time}s)")
 
     def simulate_bullets_turn(self) -> None:
         start_time = time.time()
@@ -631,7 +637,6 @@ class GameMap:
     def a_star(self, start: Coords, goal: Coords, dirs: list[Coords], metric: Callable[[Coords, Coords], int]) -> list[list[int]]:
         start_time = time.time()
 
-        self.infty = 2 * self.width * self.height
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
         pq = queue.PriorityQueue()
         pq.put((0, (0, start)))
@@ -666,23 +671,42 @@ class GameMap:
     def maximum_metric(self, start: Coords, goal: Coords) -> int:
         return max(self.coord_diffs(start, goal))
 
+    def bfs(self, start: Coords, dirs: list[Coords]):
+        start_time = time.time()
+
+        dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
+        q = queue.Queue()
+        q.put((0, start))
+        while not q.empty():
+            dist, (x, y) = q.get()
+            if dists_from_start[y][x] < self.infty or self.wall_grid[y][x]:
+                continue
+            dists_from_start[y][x] = dist
+            for d in dirs:
+                q.put((dist + 1, ((x + d[0]) % self.width, (y + d[1]) % self.height)))
+
+        self.bfs_time += time.time() - start_time
+        return dists_from_start
+
+    def compute_cowboy_distances(self, cowboy: Cowboy):
+        if cowboy.position not in self.cached_distances:
+            self.cached_distances[cowboy.position] = self.bfs(cowboy.position, self.dirs_cowboy)
+
+        return self.cached_distances[cowboy.position]
+
     # Returns the length of the shortest path of the object to (x, y).
     # If unreachable, returns a sort of "infinite" value
-    def distance_from(self, context: Cowboy | Bullet, pos: Coords) -> int:
+    def distance_from(self, context: Cowboy, pos: Coords) -> int:
         x, y = pos
         if context is None or x < 0 or x >= self.width or y < 0 or y >= self.height:
             return self.width * self.height
 
-        distances = self.a_star(
-            context.position,
-            (x, y),
-            self.dirs_cowboy if type(context) is Cowboy else self.dirs_bullet,
-            self.manhattan_metric if type(context) is Cowboy else self.maximum_metric)
+        distances = self.compute_cowboy_distances(context)
 
         return distances[y][x]
 
     # Returns the direction (index of direction) of the first step to (x, y).
-    def which_way(self, context: Cowboy | Bullet, pos: Coords) -> Coords:
+    def which_way(self, context: Cowboy, pos: Coords) -> Coords:
         x, y = pos
         if context.position == (x, y):
             return (0, 0)
@@ -690,12 +714,8 @@ class GameMap:
         if context is None or x < 0 or x >= self.width or y < 0 or y >= self.height:
             return (0, 0)
 
-        dirs = self.dirs_cowboy if type(context) is Cowboy else self.dirs_bullet
-        distances = self.a_star(
-            context.position,
-            (x, y),
-            dirs,
-            self.manhattan_metric if type(context) is Cowboy else self.maximum_metric)
+        dirs = self.dirs_cowboy
+        distances = self.compute_cowboy_distances(context)
 
         # (x, y) will change from here
         while True:
@@ -709,7 +729,7 @@ class GameMap:
                     xy_changed = True
                     break
             if not xy_changed:
-                print("Problem in A*.")
+                print("Problem in BFS output!")
                 return (0, 0)
 
     def number_of_golds(self):
