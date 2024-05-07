@@ -4,6 +4,7 @@ from flask_wtf import FlaskForm  # type: ignore
 from werkzeug.exceptions import NotFound
 import wtforms
 from uuid import uuid4
+from simple_websocket import Server, ConnectionClosed
 
 from blockly import game
 from blockly.team import Team
@@ -44,7 +45,28 @@ def login(next: str = "/"):
 
 @app.route('/')
 def index():
-    return render_template('team_index.html')
+    G: game.Game = g.G
+
+    return render_template(
+        'team_index.html',
+        map_state=G.map.get_state(),
+    )
+
+
+@app.route('/ws/map', websocket=True)
+def ws_map():
+    ws = Server.accept(request.environ)
+
+    G: game.Game = g.G
+    G.ws_connect(ws)
+    try:
+        while True:
+            data = ws.receive()
+            ws.send(data)
+    except ConnectionClosed:
+        G.ws_disconnect(ws)
+
+    return ''
 
 
 @app.route('/<string:entity>-editor')
@@ -228,15 +250,3 @@ def set_program(entity: str):
             "last_modified": program.last_modified,
             "active": uuid == active
         })
-
-
-# @app.route('/turn', methods=['POST'])
-# def get_count_route():
-#     print("Hello world!")
-#     game_idx = request.json.get('game_idx', 1)
-#     print(game_idx)
-#     xml_code = request.json.get('xml_code', 1)
-
-#     print(xml_code)
-
-#     return jsonify({'positions': 'hello flask'})

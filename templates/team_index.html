@@ -1,14 +1,58 @@
 {% extends "base.html" %}
-{% from "bootstrap5/form.html" import render_form %}
+{% block head %}
+<script src="{{ url_for('static', filename='map.js') }}"></script>
+{% endblock %}
 {% block title %}Přehled{% endblock %}
 {% block body %}
 
-<canvas id="gridCanvas" width="500" height="500"></canvas>
+<div class="score_counters" id="score"></div>
+<canvas id="grid_canvas" width="800px"></canvas>
 
 <script>
-	canvas = document.getElementById('gridCanvas');
-	canvasContext = canvas.getContext('2d');
-	drawGrid();
+    const game_score = document.getElementById('score');
+    const game_canvas = document.getElementById('grid_canvas');
+
+    // Draw initial state
+    var data = {{ map_state | tojson }};
+    drawMap(data, game_canvas);
+    showScore(data["points"], game_score);
+
+    function showScore(points, element) {
+        var out = [];
+        points.forEach((x) => {
+            out.push(`<div>${x[0]}: <span>${x[1]}</span></div>`);
+        });
+        element.innerHTML = out.join("");
+    }
+
+    var wsProtocol = 'ws://';
+    if (window.location.protocol === 'https:') {
+        wsProtocol = 'wss://';
+    }
+
+    function connect_ws() {
+        const socket = new WebSocket(wsProtocol + location.host + '/ws/map');
+        socket.onmessage = function(ev) {
+            data = JSON.parse(ev.data);
+            if (data["type"] == "map") {
+                showScore(data["data"]["points"], game_score);
+                drawMap(data["data"], game_canvas);
+            }
+        };
+        socket.onclose = function(e) {
+            console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+            setTimeout(function() {
+                connect_ws();
+            }, 1000);
+        };
+        socket.onerror = function(err) {
+            console.error('Socket encountered error: ', err.message, 'Closing socket');
+            ws.close();
+        };
+    }
+
+    connect_ws();
+
 </script>
 
 {% endblock %}
