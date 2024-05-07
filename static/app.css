@@ -72,3 +72,21 @@ nav#main-menu a.active {
 	background-color: #ddd;
 	color: black;
 }
+
+div.score_counters {
+	width: 100%;
+	display: flex;
+}
+
+div.score_counters div {
+	flex: 1;
+	font-weight: bold;
+	color: #666666;
+	text-align: center;
+}
+
+div.score_counters div span {
+	font-size: 160%;
+	color: black;
+	font-family: monospace;
+}

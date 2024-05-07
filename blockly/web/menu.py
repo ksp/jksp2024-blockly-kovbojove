@@ -23,7 +23,8 @@ class MenuItem:
 def get_menu():
     if g.is_org:
         items = [
-            MenuItem(url_for('org.index'), "Přehled"),
+            MenuItem(url_for('org.map'), "Mapa"),
+            MenuItem(url_for('org.control'), "Ovládání"),
         ]
 
     elif g.team:

@@ -35,6 +35,16 @@ def login(next: str = "/org/"):
     return render_template('org_login.html', form=form)
 
 
+@app.route('/org/')
+def map():
+    G: game.Game = g.G
+
+    return render_template(
+        'org_map.html',
+        map_state=G.map.get_state(),
+    )
+
+
 class ActionForm(FlaskForm):
     calc_cowboys = wtforms.SubmitField('Kolo kovbojů')
     calc_bullets = wtforms.SubmitField('Kolo střel')
@@ -54,8 +64,8 @@ class TimerForm(FlaskForm):
     start = wtforms.SubmitField('Spustit timer')
 
 
-@app.route('/org/', methods=('GET', 'POST'))
-def index():
+@app.route('/org/control', methods=('GET', 'POST'))
+def control():
     G: game.Game = g.G
     action_form = ActionForm()
     timer_form = TimerForm()
@@ -84,17 +94,17 @@ def index():
                     G.stop_timer()
                     flash("Timer zastaven", "warning")
 
-        return redirect(url_for("org.index"))
+        return redirect(url_for("org.control"))
 
     timer_form.cowboy_turn_period.data = G.timer_cowboy_turn_period
     timer_form.bullet_turn_period.data = G.timer_bullet_turn_period
     timer_form.bullet_turns.data = G.timer_bullet_turns
 
     return render_template(
-        'org_index.html',
+        'org_control.html',
+        timer_running=G.timer is not None,
         action_form=action_form,
         timer_form=timer_form,
-        map_state=G.map.get_state(),
     )
 
 
