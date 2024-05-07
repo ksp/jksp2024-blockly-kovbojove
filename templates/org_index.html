@@ -1,10 +1,28 @@
 {% extends "base.html" %}
-{% from "bootstrap5/form.html" import render_form %}
+{% from "bootstrap5/form.html" import render_form, render_field, render_form_row %}
 {% block title %}Org index{% endblock %}
 {% block body %}
 
-<h2>Spočítat kolo</h2>
-{{ render_form(action_form) }}
+<h3>Timer:</h3>
+<form method="post">
+    {{ timer_form.csrf_token() }}
+    {{ render_form_row([
+        timer_form.cowboy_turn_period,
+        timer_form.bullet_turn_period,
+        timer_form.bullet_turns,
+        timer_form.stop,
+        timer_form.start,
+    ], button_map={'stop': 'danger', 'start': 'success'}) }}
+</form>
+
+<h3>Spočítat jednotlivě:</h3>
+<form method="post">
+    {{ action_form.csrf_token() }}
+    <div class="btn-group">
+        {{ render_field(action_form.calc_cowboys) }}
+        {{ render_field(action_form.calc_bullets) }}
+    </div>
+</form>
 
 <canvas id="grid_canvas" width="{{ 2 * square_half * grid_width }}" height="{{ 2 * square_half * grid_height }}"></canvas>
 

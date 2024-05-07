@@ -135,46 +135,50 @@ def get_program_code(entity: str, uuid: str):
 
 @app.route('/api/<string:entity>/<string:uuid>/active', methods=['POST'])
 def set_active_program(entity: str, uuid: str):
-    team: Team = g.team
+    G: game.Game = g.G
+    with G.lock:
+        team: Team = g.team
 
-    if entity == "cowboy":
-        program_info = team.cowboy_programs.get(uuid)
-        if program_info is None:
+        if entity == "cowboy":
+            program_info = team.cowboy_programs.get(uuid)
+            if program_info is None:
+                raise NotFound()
+            team.set_active_cowboy(uuid)
+        elif entity == "bullet":
+            program_info = team.bullet_programs.get(uuid)
+            if program_info is None:
+                raise NotFound()
+            team.set_active_bullet(uuid)
+        else:
             raise NotFound()
-        team.set_active_cowboy(uuid)
-    elif entity == "bullet":
-        program_info = team.bullet_programs.get(uuid)
-        if program_info is None:
-            raise NotFound()
-        team.set_active_bullet(uuid)
-    else:
-        raise NotFound()
 
-    return jsonify({'ok': 'ok'})
+        return jsonify({'ok': 'ok'})
 
 
 @app.route('/api/<string:entity>/<string:uuid>', methods=['DELETE'])
 def delete_program(entity: str, uuid: str):
-    team: Team = g.team
+    G: game.Game = g.G
+    with G.lock:
+        team: Team = g.team
 
-    if entity == "cowboy":
-        program_info = team.cowboy_programs.get(uuid)
-        active = team.active_cowboy
-        d_func = team.delete_cowboy
-    elif entity == "bullet":
-        program_info = team.bullet_programs.get(uuid)
-        active = team.active_bullet
-        d_func = team.delete_bullet
-    else:
-        raise NotFound()
+        if entity == "cowboy":
+            program_info = team.cowboy_programs.get(uuid)
+            active = team.active_cowboy
+            d_func = team.delete_cowboy
+        elif entity == "bullet":
+            program_info = team.bullet_programs.get(uuid)
+            active = team.active_bullet
+            d_func = team.delete_bullet
+        else:
+            raise NotFound()
 
-    if program_info is None:
-        return jsonify({'error': 'Program neexistuje'}), 404
-    elif uuid == active:
-        return jsonify({'error': 'Nelze smazat aktivní program'}), 400
-    else:
-        d_func(uuid)
-        return jsonify({'ok': 'ok'})
+        if program_info is None:
+            return jsonify({'error': 'Program neexistuje'}), 404
+        elif uuid == active:
+            return jsonify({'error': 'Nelze smazat aktivní program'}), 400
+        else:
+            d_func(uuid)
+            return jsonify({'ok': 'ok'})
 
 
 @app.route('/api/<string:entity>', methods=['POST'])
@@ -207,30 +211,32 @@ def set_program(entity: str):
     except Exception as e:
         return jsonify({'error': f'Problém při parsování programu: {e}'}), 400
 
-    team: Team = g.team
-    if entity == "cowboy":
-        program = team.save_cowboy(uuid, name, description, program)
-        active = team.active_cowboy
-    elif entity == "bullet":
-        program = team.save_bullet(uuid, name, description, program)
-        active = team.active_bullet
+    G: game.Game = g.G
+    with G.lock:
+        team: Team = g.team
+        if entity == "cowboy":
+            program = team.save_cowboy(uuid, name, description, program)
+            active = team.active_cowboy
+        elif entity == "bullet":
+            program = team.save_bullet(uuid, name, description, program)
+            active = team.active_bullet
 
-    return jsonify({
-        "uuid": uuid,
-        "name": program.name,
-        "description": program.description,
-        "last_modified": program.last_modified,
-        "active": uuid == active
-    })
+        return jsonify({
+            "uuid": uuid,
+            "name": program.name,
+            "description": program.description,
+            "last_modified": program.last_modified,
+            "active": uuid == active
+        })
 
 
-@app.route('/turn', methods=['POST'])
-def get_count_route():
-    print("Hello world!")
-    game_idx = request.json.get('game_idx', 1)
-    print(game_idx)
-    xml_code = request.json.get('xml_code', 1)
+# @app.route('/turn', methods=['POST'])
+# def get_count_route():
+#     print("Hello world!")
+#     game_idx = request.json.get('game_idx', 1)
+#     print(game_idx)
+#     xml_code = request.json.get('xml_code', 1)
 
-    print(xml_code)
+#     print(xml_code)
 
-    return jsonify({'positions': 'hello flask'})
+#     return jsonify({'positions': 'hello flask'})
