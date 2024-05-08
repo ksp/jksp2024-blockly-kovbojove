@@ -7,7 +7,7 @@
 {% block body %}
 
 <div class="score_counters" id="score"></div>
-<canvas id="grid_canvas" width="800px"></canvas>
+<canvas id="grid_canvas" width="900px"></canvas>
 
 <script>
     const game_score = document.getElementById('score');
@@ -17,14 +17,6 @@
     var data = {{ map_state | tojson }};
     drawMap(data, game_canvas);
     showScore(data["points"], game_score);
-
-    function showScore(points, element) {
-        var out = [];
-        points.forEach((x) => {
-            out.push(`<div>${x[0]}: <span>${x[1]}</span></div>`);
-        });
-        element.innerHTML = out.join("");
-    }
 
     var wsProtocol = 'ws://';
     if (window.location.protocol === 'https:') {

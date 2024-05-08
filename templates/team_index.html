@@ -17,14 +17,6 @@
     drawMap(data, game_canvas);
     showScore(data["points"], game_score);
 
-    function showScore(points, element) {
-        var out = [];
-        points.forEach((x) => {
-            out.push(`<div>${x[0]}: <span>${x[1]}</span></div>`);
-        });
-        element.innerHTML = out.join("");
-    }
-
     var wsProtocol = 'ws://';
     if (window.location.protocol === 'https:') {
         wsProtocol = 'wss://';

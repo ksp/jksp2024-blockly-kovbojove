@@ -19,6 +19,14 @@ const teamColors = {
     "gray": ["#808080", "#808080"]
 };
 
+function showScore(points, element) {
+    var out = [];
+    points.forEach((x) => {
+        out.push(`<div style='color: ${teamColors[x[0]][1]};'>${x[0]}:<br><span>${x[1]}</span></div>`);
+    });
+    element.innerHTML = out.join("");
+}
+
 function drawGrid(game_canvas) {
     ctx.strokeStyle = '#c2c2a3';
     for (let x = 0; x <= width; x++) {
@@ -63,7 +71,7 @@ function drawCowboy(x, y, team) {
 
 function drawBullet(x, y, team) {
     y = height - y - 1
-    ctx.fillStyle = teamColors[team][0];
+    ctx.fillStyle = teamColors[team][1];
     ctx.beginPath();
     ctx.arc((x * squareSize) + squareHalf, (y * squareSize) + squareHalf, squareHalf / 3, 0, Math.PI * 2);
     ctx.fill();
