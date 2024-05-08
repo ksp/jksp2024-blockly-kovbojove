@@ -21,6 +21,12 @@ teams = [
     Team("green", "lazyCoalSprings"),
     Team("blue", "dryWaterMine"),
     Team("yellow", "burningCoalSprings"),
+    Team("pink", "drySteamTelegram"),
+    Team("violet", "heroicOldCowboy"),
+    Team("olive", "funnySmallBuffalo"),
+    Team("maroon", "sweetDeadWhisky"),
+    Team("black", "brokenLittleRevolver"),
+    Team("white", "lazyWiseSheriff"),
 ]
 
 
