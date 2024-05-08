@@ -1,3 +1,5 @@
+from multiprocessing import Pool
+import os
 import json
 from random import randrange as rr
 from random import shuffle
@@ -505,6 +507,19 @@ class GameMap:
         shuffle(self.active_cowboys)
         # make copy so that self.active_cowboys could be modified during the turn (when cowboy is hit)
         cowboys_to_proceed = self.active_cowboys.copy()
+
+        # Ensure BFS is computed for all position of cowboys (in parallel)
+        # cowboys_to_compute = [cowboy for cowboy in cowboys_to_proceed if cowboy.position not in self.cached_distances]
+        # if len(cowboys_to_compute) > 0:
+        #     cpus = len(os.sched_getaffinity(0))
+        #     with Pool(cpus) as pool:
+        #         results = pool.starmap(
+        #             self.bfs,
+        #             [(cowboy.position, self.dirs_cowboy) for cowboy in cowboys_to_compute]
+        #         )
+        #     for (cowboy, result) in zip(cowboys_to_compute, results):
+        #         self.cached_distances[cowboy.position] = result
+        #     self.bfs_time += time.time() - start_time
 
         # In this order, process their moves.
         for cowboy in cowboys_to_proceed:
