@@ -47,6 +47,24 @@ class Gold:
     position: Coords
 
 
+class TeamStats:
+    points: int
+    golds: int
+    fired_bullets: int
+
+    deaths: int
+    kills: list[int]
+    killed_bullets: int
+
+    def __init__(self, kills_list, points = 0, golds = 0, fired_bullets = 0, deaths = 0, killed_bullets = 0):
+        self.points = points
+        self.golds = golds
+        self.fired_bullets = fired_bullets
+        self.deaths = deaths
+        self.kills = kills_list
+        self.killed_bullets = killed_bullets
+
+
 class GameMap:
     save_dir: str
     dirs_cowboy = [(-1, 0), (0, 1), (1, 0), (0, -1)]
@@ -67,7 +85,7 @@ class GameMap:
     bullet_grid: list[list[Bullet]]
     gold_grid: list[list[Gold]]
 
-    team_points: list[int]
+    team_stats: list[TeamStats]
 
     gold_list: list[Gold]
     cowboy_list: list[Cowboy]
@@ -139,7 +157,8 @@ class GameMap:
             self.init_new(wall_fraction, cluster_max)
 
     def init_new(self, wall_fraction: int = 50, cluster_max: int = 5):
-        self.team_points = [0 for _ in range(len(self.teams))]
+        self.team_stats = [TeamStats([0 for _ in range(len(self.teams))]) for _ in range(len(self.teams))]
+
         self.turn_idx = 0
         self.bullet_subturn = 0
         self.cowboy_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
@@ -195,7 +214,12 @@ class GameMap:
             "turn_idx": self.turn_idx,
             "bullet_subturn": self.bullet_subturn,
 
-            "team_points": self.team_points,
+            "team_stats_points": [self.team_stats[i].points for i in range(len(self.team_stats))],
+            "team_stats_golds": [self.team_stats[i].golds for i in range(len(self.team_stats))],
+            "team_stats_fired_bullets": [self.team_stats[i].fired_bullets for i in range(len(self.team_stats))],
+            "team_stats_deaths": [self.team_stats[i].deaths for i in range(len(self.team_stats))],
+            "team_stats_kills": [self.team_stats[i].kills for i in range(len(self.team_stats))],
+            "team_stats_killed_bullets": [self.team_stats[i].killed_bullets for i in range(len(self.team_stats))],
 
             "walls": walls,
             "golds": golds,
@@ -217,10 +241,22 @@ class GameMap:
         self.turn_idx = data["turn_idx"]
         self.bullet_subturn = data["bullet_subturn"]
 
-        self.team_points: list[int] = data["team_points"]
+        self.team_stats: list[TeamStats] = []
+        for i in range(len(data["team_stats_points"])):
+            self.team_stats.append(
+                TeamStats(
+                    data["team_stats_kills"][i],
+                    data["team_stats_points"][i],
+                    data["team_stats_golds"][i],
+                    data["team_stats_fired_bullets"][i],
+                    data["team_stats_deaths"][i],
+                    data["team_stats_killed_bullets"][i],
+                )
+            )
+
         # Number of teams cannot be changed!
-        if len(self.team_points) != len(self.teams):
-            raise Exception(f"Different number of teams! ({len(self.team_points)} in '{filename}', {len(self.teams)} teams in config)")
+        if len(self.team_stats) != len(self.teams):
+            raise Exception(f"Different number of teams! ({len(self.team_stats)} in '{filename}', {len(self.teams)} teams in config)")
 
         self.wall_grid = [[False for _ in range(self.width)] for _ in range(self.height)]
         self.gold_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
@@ -442,8 +478,10 @@ class GameMap:
         if cowboy.position is None or cowboy.position != bullet.position:
             return
         print(f"GAME[INFO]: {cowboy} hit by {bullet}")
+        self.team_stats[bullet.team].kills[cowboy.team] += 1
+        self.team_stats[cowboy.team].deaths += 1
         if cowboy.team != bullet.team:
-            self.team_points[bullet.team] += self.SHOTDOWN_BOUNTY
+            self.team_stats[bullet.team].points += self.SHOTDOWN_BOUNTY
         x, y = cowboy.position
         self.bullet_disappear(bullet)
         self.cowboy_grid[y][x] = None
@@ -459,6 +497,8 @@ class GameMap:
         self.bullet_disappear(b1)
         self.bullet_disappear(b2)
         self.current_explosions.append((x, y))
+        self.team_stats[b1.team].killed_bullets += 1
+        self.team_stats[b2.team].killed_bullets += 1
 
     def get_state(self) -> dict[str, list[tuple[Coords, str] | list[Coords]]]:
         walls = []
@@ -486,7 +526,7 @@ class GameMap:
             "explosions": self.current_explosions,
             "shot_directions": self.current_gun_triggers,
             'points': [
-                (team.login, self.team_points[i]) for (i, team) in enumerate(self.teams)
+                (team.login, self.team_stats[i].points) for (i, team) in enumerate(self.teams)
             ],
         }
 
@@ -569,10 +609,12 @@ class GameMap:
                         gold.position = None
                         self.gold_grid[new_y][new_x] = None
                         golds_to_respawn.append(gold)
-                        self.team_points[cowboy.team] += self.GOLD_PRICE
+                        self.team_stats[cowboy.team].golds += 1
+                        self.team_stats[cowboy.team].points += self.GOLD_PRICE
 
                 elif action.type == ActionType.FIRE:
-                    self.team_points[cowboy.team] -= self.BULLET_PRICE
+                    self.team_stats[cowboy.team].points -= self.BULLET_PRICE
+                    self.team_stats[cowboy.team].fired_bullets += 1
                     self.current_gun_triggers.append((x, y, self.action_dirs_dict[d]))
 
                     print(f"GAME[ACTION]: Fired bullet at {new_x},{new_y} with direction {d}")
@@ -844,7 +886,7 @@ class GameMap:
         return context.team
 
     def my_points(self, context: Cowboy | Bullet) -> int:
-        return self.team_points[context.team]
+        return self.team_stats[context.team].points
 
     # Helper
     def cowboy_i(self, i: int) -> Cowboy | None:
