@@ -372,6 +372,41 @@ class InfoMyPosition(Block):
         return run.map.my_position(run.context)
 
 
+# Generic query:
+
+class InfoMapPosition(Block):
+    name = "info_map_position"
+    messages = ["Je na %1 %2?"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "position", "POSITION", Position),
+        BlockInput(BlockInputKind.FIELD, "entity", "ENTITY", str, dropdown=[
+            ("Zeď", "WALL"), ("Zlato", "GOLD"),
+            ("Kovboj", "COWBOY"), ("Střela", "BULLET"),
+        ]),
+    ]
+    returns = bool
+    color = 300
+    tooltip = "Ověří, jestli je na daných souřadnicích zeď, zlato, kovboj nebo střela."
+
+    position: Block
+    entity: Field
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        pos = cast(Position, self.position.execute(run))
+        (c, r) = pos
+        entity = self.entity.execute(run)
+        if entity == "WALL":
+            return run.map.wall_grid[r][c]
+        elif entity == "GOLD":
+            return run.map.gold_grid[r][c] is not None
+        elif entity == "COWBOY":
+            return run.map.cowboy_grid[r][c] is not None
+        elif entity == "BULLET":
+            return run.map.bullet_grid[r][c] is not None
+        return False  # should not happen
+
+
 # Golds:
 
 class InfoGoldCount(Block):
@@ -471,6 +506,25 @@ class InfoBulletCount(Block):
         return run.map.number_of_bullets()
 
 
+class InfoBulletTeam(Block):
+    name = "info_bullet_team"
+    messages = ["Tým střely %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "bullet_block", "BULLET", int),
+    ]
+    returns = int
+    color = 340
+    tooltip = "Vrátí index týmu střely s daným ID"
+
+    bullet_block: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        bullet = self.bullet_block.execute(run)
+        assert isinstance(bullet, int)
+        return run.map.bullet_i_team(bullet)
+
+
 class InfoBulletPosition(Block):
     name = "info_bullet_position"
     messages = ["Pozice střely %1"]
@@ -491,6 +545,32 @@ class InfoBulletPosition(Block):
 
 
 # Position transformations:
+
+class ModifyPosition(Block):
+    name = "modify_position"
+    messages = ["posuň %1 o %2"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "position", "POSITION", Position),
+        BlockInput(BlockInputKind.VALUE, "direction", "DIRECTION", int),
+    ]
+    returns = Position
+    color = 30
+    tooltip = "Posune souřadnice o jedno políčko daným směrem (směr bere jako číslo modulo 8, ← je 0)"
+
+    position: Block
+    direction: Block
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        pos = cast(Position, self.position.execute(run))
+        dir = self.direction.execute(run)
+        assert type(dir) == int
+        (dx, dy) = all_directions[dir % 8].value
+        (x, y) = pos
+        x = (x + dx) % run.map.width
+        y = (y + dy) % run.map.height
+        return (x, y)
+
 
 class TransformPositionX(Block):
     name = "transform_position_x"
@@ -754,6 +834,28 @@ class LogicBoolean(Block):
         return ret
 
 
+class ConstantDirection(Block):
+    name = "constant_direction"
+    messages = ["%1"]
+    inputs = [
+        BlockInput(BlockInputKind.FIELD, "direction", "DIRECTION", str, dropdown=[
+            ("←", "0"), ("↖", "1"), ("↑", "2"), ("↗", "3"),
+            ("→", "4"), ("↘", "5"), ("↓", "6"), ("↙", "7"),
+        ]),
+    ]
+    returns = int
+    color = 220
+    tooltip = "Směr jako číslo (← je 0 a pak po směru hodinových ručiček)"
+
+    direction: Field
+
+    def execute(self, run: Run) -> bool:
+        run.add_steps(1)
+        ret = int(self.direction.execute(run))
+        assert isinstance(ret, int)
+        return ret
+
+
 class LogicCompare(Block):
     name = "logic_compare"
     inputs = [
@@ -846,6 +948,25 @@ class MathNumber(Block):
         ret = self.field.execute(run)
         assert isinstance(ret, int)
         return ret
+
+
+class MathAbs(Block):
+    name = "math_abs"
+    messages = ["abs %1"]
+    inputs = [
+        BlockInput(BlockInputKind.VALUE, "number", "NUM", int),
+    ]
+    returns = int
+    color = 220
+    tooltip = "Absolutní hodnota čísla"
+
+    number: Field
+
+    def execute(self, run: Run) -> int:
+        run.add_steps(1)
+        ret = self.number.execute(run)
+        assert isinstance(ret, int)
+        return abs(ret)
 
 
 class MathArithmeticCustom(Block):
@@ -1145,7 +1266,9 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ("Konstanty a matematika", None, [
         LogicBoolean,
         MathNumber,
+        ConstantDirection,
         MathArithmeticCustom,
+        MathAbs,
         # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
     ]),
     ("Herní info", None, [
@@ -1156,6 +1279,8 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         InfoMyPosition,
         InfoTurn,
 
+        InfoMapPosition,
+
         InfoGoldCount,
         InfoGoldPosition,
 
@@ -1164,9 +1289,11 @@ cowboy_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         InfoCowboyPosition,
 
         InfoBulletCount,
+        InfoBulletTeam,
         InfoBulletPosition,
     ]),
     ("Souřadnice a transformace", None, [
+        ModifyPosition,
         TransformPositionX,
         TransformPositionY,
         TransformXYPosition,
@@ -1207,7 +1334,9 @@ bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
     ("Konstanty a matematika", None, [
         LogicBoolean,
         MathNumber,
+        ConstantDirection,
         MathArithmeticCustom,
+        MathAbs,
         # MathModulo, # TODO: maybe custom MathArithmetic with modulo?
     ]),
     ("Herní info", None, [
@@ -1220,12 +1349,19 @@ bullet_blocks: list[tuple[str, dict[str, str] | None, list[Type[Block]]]] = [
         InfoMyDirection,
         InfoMyRange,
 
+        InfoMapPosition,
+
         # Bullet knows only about cowboys
         InfoCowboyCount,
         InfoCowboyTeam,
         InfoCowboyPosition,
+
+        InfoBulletCount,
+        InfoBulletTeam,
+        InfoBulletPosition,
     ]),
     ("Souřadnice a transformace", None, [
+        ModifyPosition,
         TransformPositionX,
         TransformPositionY,
         TransformXYPosition,
