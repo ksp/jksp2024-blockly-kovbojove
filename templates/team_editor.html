@@ -177,7 +177,9 @@ async function reloadList() {
 
             var name = row.insertCell()
             if (program['active']) {
-                name.innerHTML = "<strong>" + program['name'] + "</strong> (aktivní)";
+                name.innerHTML = "<strong>" + program['name'] + "</strong> <small>(aktivní)</small>";
+            } else if (!program['valid']) {
+                name.innerHTML = program['name'] + " <small>(nevalidní)</small>";
             } else {
                 name.innerText = program['name'];
             }
@@ -188,7 +190,9 @@ async function reloadList() {
             var buttons = "<div class='btn-group'>";
             buttons += "<button class='btn btn-sm btn-outline-primary' onclick='loadProgram(\"" + uuid + "\")'>Načíst v editoru</button>";
             if (!program['active']) {
-                buttons += "<button class='btn btn-sm btn-outline-success' onclick='setActive(\"" + uuid + "\")'>Nastavit jako aktivní</button>";
+                if (program['valid']) {
+                    buttons += "<button class='btn btn-sm btn-outline-success' onclick='setActive(\"" + uuid + "\")'>Nastavit jako aktivní</button>";
+                }
                 buttons += "<button class='btn btn-sm btn-outline-danger' onclick='deleteProgram(\"" + uuid + "\")'>Smazat</button>";
             }
             buttons += "</div>";

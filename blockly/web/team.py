@@ -7,6 +7,8 @@ from uuid import uuid4
 from simple_websocket import Server, ConnectionClosed
 
 from blockly import game
+from blockly.exceptions import ProgramParseException
+from blockly.program import Program
 from blockly.team import Team
 from blockly.parser import Parser
 from blockly.blocks import bullet_blocks, bullet_factories, cowboy_blocks, cowboy_factories
@@ -130,7 +132,8 @@ def get_programs(entity: str):
             "name": program.name,
             "description": program.description,
             "last_modified": program.last_modified,
-            "active": uuid == active
+            "active": uuid == active,
+            "valid": program.program.valid()
         })
 
     out.sort(key=lambda x: x['name'])
@@ -165,15 +168,17 @@ def set_active_program(entity: str, uuid: str):
             program_info = team.cowboy_programs.get(uuid)
             if program_info is None:
                 raise NotFound()
-            team.set_active_cowboy(uuid)
+            ok = team.set_active_cowboy(uuid)
         elif entity == "bullet":
             program_info = team.bullet_programs.get(uuid)
             if program_info is None:
                 raise NotFound()
-            team.set_active_bullet(uuid)
+            ok = team.set_active_bullet(uuid)
         else:
             raise NotFound()
 
+        if not ok:
+            return jsonify({'error': 'Program nelze nastavit jako aktivní'}), 400
         return jsonify({'ok': 'ok'})
 
 
@@ -227,9 +232,13 @@ def set_program(entity: str):
         return jsonify({'error': 'Název nesmí být prázdný'}), 400
     description = data.get("description", "")
 
+    err: ProgramParseException | None = None
     try:
         parser = Parser(factories)
         program = parser.parse_program(data.get("program"))
+    except ProgramParseException as e:
+        err = e
+        program = Program(None, None, data.get("program"))
     except Exception as e:
         return jsonify({'error': f'Problém při parsování programu: {e}'}), 400
 
@@ -237,16 +246,22 @@ def set_program(entity: str):
     with G.lock:
         team: Team = g.team
         if entity == "cowboy":
+            if team.active_cowboy == uuid and not program.valid():
+                return jsonify({'error': f'Nelze uložit nevalidní program jako aktivní. Uložte ho jako nový: {err}'}), 400
             program = team.save_cowboy(uuid, name, description, program)
             active = team.active_cowboy
         elif entity == "bullet":
+            if team.active_bullet == uuid and not program.valid():
+                return jsonify({'error': f'Nelze uložit nevalidní program jako aktivní. Uložte ho jako nový: {err}'}), 400
             program = team.save_bullet(uuid, name, description, program)
             active = team.active_bullet
 
-        return jsonify({
-            "uuid": uuid,
-            "name": program.name,
-            "description": program.description,
-            "last_modified": program.last_modified,
-            "active": uuid == active
-        })
+    return jsonify({
+        "uuid": uuid,
+        "name": program.name,
+        "description": program.description,
+        "last_modified": program.last_modified,
+        "active": uuid == active,
+        "valid": program.program.valid(),
+        "error": str(err) if err else None,
+    })

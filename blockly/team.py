@@ -75,14 +75,17 @@ class Team:
             try:
                 program = parser.parse_program(xml_input)
             except ProgramParseException as e:
-                print(f"ERROR: Cannot parse {filename}: {e}", file=sys.stderr)
-                continue
+                print(f"WARN: Program {filename} not runnable: {e}", file=sys.stderr)
+                program = Program(None, None, xml_input)
 
             programs[uuid] = TeamProgram(
                 name=name, description=description,
                 last_modified=last_modified, program=program)
 
         if active and active in programs:
+            if not programs[active].program.valid():
+                print(f"ERROR: Active program {active} is not runnable")
+                return programs, None
             return programs, active
         else:
             return programs, None
@@ -120,7 +123,7 @@ class Team:
         with open(self._program_filename("cowboy", uuid), "w") as f:
             f.write(program.raw_xml)
 
-        if self.active_cowboy is None:
+        if self.active_cowboy is None and program.valid():
             self.active_cowboy = uuid
         self._save()
 
@@ -133,16 +136,19 @@ class Team:
         del self.cowboy_programs[uuid]
         self._save()
 
-    def set_active_cowboy(self, uuid: str):
-        if uuid in self.cowboy_programs:
+    def set_active_cowboy(self, uuid: str) -> bool:
+        if uuid in self.cowboy_programs and self.cowboy_programs[uuid].program.valid():
             self.active_cowboy = uuid
             self._save()
+            return True
+        return False
 
     def get_cowboy_program(self) -> Program:
         if self.active_cowboy:
-            return self.cowboy_programs[self.active_cowboy].program
-        else:
-            return nop_program
+            program = self.cowboy_programs[self.active_cowboy].program
+            if program.valid():
+                return program
+        return nop_program
 
     def save_bullet(self, uuid: str, name: str, description: str, program: Program) -> TeamProgram:
         bullet = TeamProgram(
@@ -153,7 +159,7 @@ class Team:
         with open(self._program_filename("bullet", uuid), "w") as f:
             f.write(program.raw_xml)
 
-        if self.active_bullet is None:
+        if self.active_bullet is None and program.valid():
             self.active_bullet = uuid
         self._save()
 
@@ -166,13 +172,16 @@ class Team:
         del self.bullet_programs[uuid]
         self._save()
 
-    def set_active_bullet(self, uuid: str):
-        if uuid in self.bullet_programs:
+    def set_active_bullet(self, uuid: str) -> bool:
+        if uuid in self.bullet_programs and self.bullet_programs[uuid].program.valid():
             self.active_bullet = uuid
             self._save()
+            return True
+        return False
 
     def get_bullet_program(self) -> Program:
         if self.active_bullet:
-            return self.bullet_programs[self.active_bullet].program
-        else:
-            return nop_program
+            program = self.bullet_programs[self.active_bullet].program
+            if program.valid():
+                return program
+        return nop_program

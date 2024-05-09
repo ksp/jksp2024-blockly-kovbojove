@@ -14,13 +14,16 @@ if TYPE_CHECKING:
 
 class Program:
     raw_xml: str
-    root: Block
-    variables: dict[str, type]
+    root: Block | None
+    variables: dict[str, type] | None
 
-    def __init__(self, root: Block, variables: dict[str, type], raw_xml: str) -> None:
+    def __init__(self, root: Block | None, variables: dict[str, type] | None, raw_xml: str) -> None:
         self.root = root
         self.variables = variables
         self.raw_xml = raw_xml
+
+    def valid(self) -> bool:
+        return self.root is not None
 
     # returns (True/False, action/string error, #steps)
     def execute(self, max_steps: int, map: GameMap, context: Cowboy | Bullet) -> tuple[bool, Action | str, int]:
