@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Log akcí{% endblock %}
+{% block body %}
+
+Níže jsou výsledky všech akcí vašich kovbojů/střel v posledních několika tazích.
+
+<h2>Kovbojové</h2>
+
+{% for results in cowboy_results %}
+<h3>{% if loop.index0 == 0 %}Poslední kolo{% else %}N-{{ loop.index0 }}. kolo{% endif %}</h3>
+<ul>
+{% for result in results %}
+<li><code>{{ result }}</code></li>
+{% endfor %}
+</ul>
+{% endfor %}
+
+<hr>
+
+<h2>Střely</h2>
+
+{% for results in bullet_results %}
+<h3>{% if loop.index0 == 0 %}Poslední kolo{% else %}N-{{ loop.index0 }}. kolo{% endif %}</h3>
+<ul>
+{% for result in results %}
+<li><code>{{ result }}</code></li>
+{% endfor %}
+</ul>
+{% endfor %}
+
+
+
+{% endblock %}

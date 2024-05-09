@@ -85,6 +85,11 @@ class GameMap:
     # the distances.
     cached_distances: dict[Coords, list[list[int]]]
 
+    # Results of actions (not saved into JSON)
+    # (list of rounds, for each round a list of teams)
+    cowboy_results: list[list[list[str]]]
+    bullet_results: list[list[list[str]]]
+
     # Only counts cowboy turns
     turn_idx: int
     # count bullet turns, reset with each turn_idx increase
@@ -123,6 +128,8 @@ class GameMap:
         self.gold_count = gold_count
 
         self.cached_distances = {}
+        self.cowboy_results = []
+        self.bullet_results = []
 
         self.save_dir = save_dir
 
@@ -521,6 +528,8 @@ class GameMap:
         #         self.cached_distances[cowboy.position] = result
         #     self.bfs_time += time.time() - start_time
 
+        cowboy_results: list[list[str]] = [[] for _ in self.teams]
+
         # In this order, process their moves.
         for cowboy in cowboys_to_proceed:
             if cowboy.position is None:
@@ -528,6 +537,14 @@ class GameMap:
 
             program = self.teams[cowboy.team].get_cowboy_program()
             status, action, steps = program.execute(self.COWBOY_MAX_STEPS, self, cowboy)
+            if status:
+                cowboy_results[cowboy.team].append(
+                    f"Kovboj na pozici {cowboy.position}: akce {action.type} (směr {action.direction}), {steps} kroků výpočtu"
+                )
+            else:
+                cowboy_results[cowboy.team].append(
+                    f"Kovboj na pozici {cowboy.position}: ERROR: {action} ({steps} kroků výpočtu)"
+                )
             print(f"GAME[ACTION]: {cowboy}: status={status}, steps={steps}, result={action}")
 
             if status and action.type != ActionType.NOP and action.direction is not None:
@@ -581,11 +598,15 @@ class GameMap:
         self.bullet_subturn = 0
         self.save()
 
+        self.cowboy_results.append(cowboy_results)
+
         elapsed = time.time() - start_time
         print(f"GAME[TURN] Cowboy turn {self.turn_idx - 1} completed in {elapsed}s (bfs time: {self.bfs_time}s)")
 
     def simulate_bullets_turn(self) -> None:
         start_time = time.time()
+
+        bullet_results: list[list[str]] = [[] for _ in self.teams]
 
         self.current_explosions = []
         # Bullets fly in order in which they are fired
@@ -597,6 +618,14 @@ class GameMap:
 
             program = self.teams[bullet.team].get_bullet_program()
             status, action, steps = program.execute(self.BULLET_MAX_STEPS, self, bullet)
+            if status:
+                bullet_results[bullet.team].append(
+                    f"Střela na pozici {bullet.position}: akce {action.type}, {steps} kroků výpočtu"
+                )
+            else:
+                bullet_results[bullet.team].append(
+                    f"Střela na pozici {bullet.position}: ERROR: {action} ({steps} kroků výpočtu)"
+                )
             print(f"GAME[ACTION]: {bullet}: status={status}, steps={steps}, result={action}")
 
             if status and action.type == ActionType.BULLET_TURN_L:
@@ -632,8 +661,24 @@ class GameMap:
         self.bullet_subturn += 1
         self.save()
 
+        self.bullet_results.append(bullet_results)
+
         elapsed = time.time() - start_time
         print(f"GAME[TURN] Bullet subturn {self.turn_idx}:{self.bullet_subturn - 1} completed in {elapsed}s")
+
+    def get_cowboy_results(self, team: Team, last_n_round: int = 5):
+        index = self.teams.index(team)
+        return [
+            results[index]
+            for results in self.cowboy_results[-last_n_round:]
+        ]
+
+    def get_bullet_results(self, team: Team, last_n_round: int = 5):
+        index = self.teams.index(team)
+        return [
+            results[index]
+            for results in self.bullet_results[-last_n_round:]
+        ]
 
     # Methods providing information for cowboys and bullets:
     # In all cases, `context` is either a Cowboy or a Bullet object.

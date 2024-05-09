@@ -112,6 +112,18 @@ def editor(entity: str):
     )
 
 
+@app.route('/debug')
+def debug():
+    G: game.Game = g.G
+    team: Team = g.team
+
+    return render_template(
+        'team_debug.html',
+        cowboy_results=reversed(G.map.get_cowboy_results(team, 5)),
+        bullet_results=reversed(G.map.get_bullet_results(team, 5)),
+    )
+
+
 @app.route('/api/<string:entity>', methods=['GET'])
 def get_programs(entity: str):
     team: Team = g.team
