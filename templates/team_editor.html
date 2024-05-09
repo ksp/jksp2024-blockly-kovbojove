@@ -234,7 +234,12 @@ async function saveProgram(overwrite) {
             return response.json().then(errResp => { throw new Error(errResp['error']) });
         }
     }).then(resp => {
-        bootstrap_alert(elEditorAlert, "success", "Program uložen");
+        console.log(resp);
+        if ("error" in resp && resp['error'] != null) {
+            bootstrap_alert(elEditorAlert, "warning", "Program uložen, ale obsahuje chyby: " + resp['error']);
+        } else {
+            bootstrap_alert(elEditorAlert, "success", "Program uložen");
+        }
         gEditorUUID = resp['uuid'];
         elProgramSave.disabled = false;
         reloadList();
