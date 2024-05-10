@@ -45,6 +45,16 @@ def map():
     )
 
 
+@app.route('/org/statistics')
+def statistics():
+    G: game.Game = g.G
+
+    return render_template(
+        'statistics.html',
+        statistics=G.map.get_statistics(),
+    )
+
+
 class ActionForm(FlaskForm):
     calc_cowboys = wtforms.SubmitField('Kolo kovbojů')
     calc_bullets = wtforms.SubmitField('Kolo střel')

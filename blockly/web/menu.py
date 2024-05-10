@@ -24,12 +24,14 @@ def get_menu():
     if g.is_org:
         items = [
             MenuItem(url_for('org.map'), "Mapa"),
+            MenuItem(url_for('org.statistics'), "Statistiky"),
             MenuItem(url_for('org.control'), "Ovládání"),
         ]
 
     elif g.team:
         items = [
             MenuItem(url_for('team.index'), "Mapa"),
+            MenuItem(url_for('team.statistics'), "Statistiky"),
             MenuItem(url_for('team.editor', entity="cowboy"), "Kovboj"),
             MenuItem(url_for('team.editor', entity="bullet"), "Střela"),
             MenuItem(url_for('team.debug'), "Log akcí"),

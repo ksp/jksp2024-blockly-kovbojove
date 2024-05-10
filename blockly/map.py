@@ -500,6 +500,9 @@ class GameMap:
         self.team_stats[b1.team].killed_bullets += 1
         self.team_stats[b2.team].killed_bullets += 1
 
+    def get_statistics(self) -> list[tuple[str, TeamStats]]:
+        return [(team.login, self.team_stats[i]) for (i, team) in enumerate(self.teams)]
+
     def get_state(self) -> dict[str, list[tuple[Coords, str] | list[Coords]]]:
         walls = []
         cowboys = []

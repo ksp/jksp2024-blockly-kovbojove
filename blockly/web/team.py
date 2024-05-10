@@ -55,6 +55,16 @@ def index():
     )
 
 
+@app.route('/statistics')
+def statistics():
+    G: game.Game = g.G
+
+    return render_template(
+        'statistics.html',
+        statistics=G.map.get_statistics(),
+    )
+
+
 @app.route('/ws/map', websocket=True)
 def ws_map():
     ws = Server.accept(request.environ)

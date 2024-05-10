@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Statistiky{% endblock %}
+{% block body %}
+
+<table class="table table-bordered table-striped table-hover">
+<thead class="table-dark">
+	<tr>
+		<th rowspan="2">Tým</th>
+		<th rowspan="2">Body</th>
+		<th rowspan="2">Zlato</th>
+		<th rowspan="2">Úmrtí</th>
+		<th colspan="3">Střely</th>
+		<th colspan="{{ statistics|length }}">Zastřelení kovbojové</th>
+	</tr>
+	<tr>
+		<th>Výstřely</th>
+		<th>Zásahy kovbojů</th>
+		<th>Zásahy střel</th>
+		{% for (team, stats) in statistics %}<th>{{ team }}</th>{% endfor %}
+	</tr>
+</thead>
+<tbody>
+{% for (team, stats) in statistics %}
+{% set i = loop.index %}
+<tr>
+	<th>{{ team }}</th>
+	<th>{{ stats.points }}</th>
+	<td>{{ stats.golds }}</td>
+	<td>{{ stats.deaths }}</td>
+	<td>{{ stats.fired_bullets }}</td>
+	<td>{{ stats.kills|sum }}
+		{% if stats.fired_bullets > 0 %}
+			<small>({{ (100 * (stats.kills|sum) / stats.fired_bullets) | round(2) }}%)</small>
+		{% endif %}
+	</td>
+	<td>{{ stats.killed_bullets }}
+		{% if stats.fired_bullets > 0 %}
+			<small>({{ (100 * stats.killed_bullets / stats.fired_bullets) | round(2) }}%)</small>
+		{% endif %}
+	</td>
+	{% for kills in stats.kills -%}
+		<td{% if i == loop.index %} class="table-secondary"{% endif %}>{{ kills }}</td>
+	{%- endfor %}
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+{% endblock %}
