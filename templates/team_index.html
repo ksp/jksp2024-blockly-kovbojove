@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 {% block head %}
 <script src="{{ url_for('static', filename='map.js') }}"></script>
+<script src="{{ url_for('static', filename='map_state.js') }}"></script>
 {% endblock %}
 {% block title %}Přehled{% endblock %}
 {% block body %}
 
 <div class="score_counters" id="score"></div>
 <canvas id="grid_canvas" width="800px"></canvas>
-
+<div id="map_controls"></div>
 <script>
     const game_score = document.getElementById('score');
     const game_canvas = document.getElementById('grid_canvas');
 
     // Draw initial state
     var data = {{ map_state | tojson }};
-    drawMap(data, game_canvas);
+    addMapState(data, game_canvas);
     showScore(data["points"], game_score);
 
     var wsProtocol = 'ws://';
@@ -28,7 +29,7 @@
             data = JSON.parse(ev.data);
             if (data["type"] == "map") {
                 showScore(data["data"]["points"], game_score);
-                drawMap(data["data"], game_canvas);
+                addMapState(data["data"], game_canvas);
             }
         };
         socket.onclose = function(e) {
