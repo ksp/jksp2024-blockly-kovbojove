@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}Manuál{% endblock %}
+{% block body %}
+
+Sbírejte zlato a porazte ostatní týmy!
+
+<ul>
+    <li>Získání zlaté mince vám dá {{ gold_price }} bodů.</li>
+    <li>Za zastřelení cizího kovboje dostanete odměnu {{ shotdown_bounty }} bodů.</li>
+    <li>Zastřelený kovboj se po {{ turns_to_respawn }} kolech v poli opět objeví.</li>
+    <li>Za vystřelení střely se platí jedním bodem.</li>
+    <li>Střely mají omezenou životnost na {{ bullet_lifetime }} kol. Po každém kole kovbojů jsou však hned tři kola střel.</li>
+</ul>
+
+<p>Souřadnice "přetékají", tedy přejít např. za pravý kraj mapy znamená vynořit se v levém.</p>
+
+<p>
+    Programy, které sestavujete, rozhodují jen o jediném tahu kovboje (resp. střely).
+    Kovbojové ani střely nemají žádnou paměť, mezi koly si neumí nic uložit. V každém kole se rozhodují jen na základě toho, co je zrovna v herním poli.
+</p>
+
+<h3>Číslování objektů a směrů</h3>
+
+<p>
+    V momentu, kdy se váš kovboj rozhoduje o svém tahu, jsou všichni kovbojové aktuálně přítomní v poli očíslování pomocí ID od 0 do jejich počtu minus 1.
+    Podobně jsou očíslované zlaté mince i aktivní střely. Informace o objektech tak můžete získávat na základě těchto ID.
+</p>
+<p>
+    Zvlášť má každý kovboj <i>index</i> v rámci svého týmu, které se po dobu hry nemění (to například umožňuje dát každému kovbojovi jinou úlohu).
+    ID a indexy kovbojů je třeba nezaměnit.
+</p>
+
+<p>
+    Směry v programu fungují jako čísla od 0 do 7:
+    <ul>
+        <li>←: 0, ↖: 1, ↑: 2, ↗: 3, →: 4, ↘: 5, ↓: 6, ↙: 7</li>
+    </ul>
+    Kovbojové se přitom mohou hýbat jen vodorovně a svisle (jen do směrů 0, 2, 4, 6). Střely během svého tahu umí upravit svůj směr jen
+    o π/4 (umí tak k aktuálnímu směru 1 přičíst nebo od něj odečíst, modulo 8). Rozhodne-li se střela pro operaci NOP (no operation),
+    pokračuje dál svým předchozím směrem.
+</p>
+
+<br>
+
+<h2>Podrobný popis bloků</h2>
+
+<br>
+
+<h3>Bloky společné pro kovboje a střelu</h3>
+
+<br>
+
+<h4>Cykly a logika.</h4>
+
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-repeat.png') }}">
+    Opakuj x-krát.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-for.png') }}">
+    Opakuj s novou proměnnou 'i' nastavenou ze začátku na x, k té po každém běhu přičti d. Jakmile je hodnota 'i' y a více, vnitřní část cyklu neproběhne.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-if.png') }}">
+    Podmíněné vyhodnocení. Chcete-li použít nějakou formu if-elseif-elseif-else, musíte ji přetažením bloků
+    definovat pomocí ikony nastavení bloku.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-cmp.png') }}">
+    Porovnej dva prvky. Vrací pravdivostní hodnotu a umí rovnost, nerovnost a porovnání velikosti.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-and_or.png') }}">
+    Binární and a or.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-neg.png') }}">
+    Booleovská negace.
+</p>
+<h4>Konstanty a matematika.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-const.png') }}">
+    Booleovské, číselné a směrové konstanty: true/false, resp. vlastní definované číslo. Směrová konstanta je jen speciální druh číselné
+    (viz popis reprezentace směrů nahoře).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-aritm.png') }}">
+    Číselná aritmetika, umí sčítání +, odečítání -, násobení ×, dělení /, mocnění ^ a modulo % (zbytek po dělení).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-abs.png') }}">
+    Absolutní hodnota z x.
+</p>
+<h4>Herní info.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-counts.png') }}">
+    Počet zlatých mincí, kovbojů a střel, které se právě nachází v poli (# značí počet).
+    K nim pak lze zvlášť přistupovat na základě ID od 0 do příslušného počtu minus 1.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-teaminfo.png') }}">
+    Příslučnost do týmu, tj. tým aktuálního kovboje (střely) a týmy kovbojů/střel podle jejich ID.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-points.png') }}">
+    Kolik bodů má teď můj tým?
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-turn.png') }}">
+    Kolikáté kolo se teď rozhoduje (můžete použít např. k volbě různé strategie podle zbytku po dělení).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-id.png') }}">
+    ID aktuálního kovboje/střely (v rámci kovbojů/střel přítomných v poli). V případě kovboje neplést s indexem!
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-mypos.png') }}">
+    Pozice (souřadnice (X, Y)) aktuálního kovboje/střely.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-posquery.png') }}">
+    Umožňuje zadat souřadnice ((X, Y) dvojici) a zjistit, zda se na dané pozici nachází konkrétní typ objektu.
+    Jde o jediný způsob, jak se dozvědět o zdech.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-pos.png') }}">
+    Pozice (souřadnice (X, Y)) objektů v poli na základě jejich ID.
+</p>
+
+<h4>Souřadnice a transformace.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-shift.png') }}">
+    Zadaná souřadnice posunutá o daný směr.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-xy.png') }}">
+    X-ová, resp. Y-ová, složka souřadnic.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-coords.png') }}">
+    Umožní manuálně vytvořit (X, Y) souřadnice ze dvou čísel.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-dist.png') }}">
+    Vzdálenost objektu od aktuálního kovboje/střely (tj. maximum mezi rozdíly X-ové a Y-ové složky souřadnic).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-direct.png') }}">
+    Směr k zadanému objektu (tj. číslo mezi 0 a 7 reprezentující směr k němu, viz popis směrů nahoře).
+</p>
+<h4>Proměnné.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-varcreate.png') }}">
+    Stisk tohoto tlačítka umožní vytvořit (pojmenovat) novou proměnnou. Proměnné mohou být číselné, booleovské (true/false)
+    a mohou to také být souřadnice (tj. (X, Y) dvojice). Typ proměnné není třeba zadat.
+    Cyklus 'count with ...' vytvoří novou číselnou proměnnou sám od sebe.
+    I směr lze zapsat do proměnné, protože je reprezentovaný číslem.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-var.png') }}">
+    Blok umožňující přistupovat k hodnotě v proměnné x.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-varset.png') }}">
+    Nastavení hodnoty proměnné přímo.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/common-varchange.png') }}">
+    Přičtení hodnoty k proměnné (funguje jen pro číselné proměnné).
+</p>
+
+<h3>Bloky kovbojů</h3>
+
+<br>
+
+<h4>Herní info.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-idx.png') }}">
+    Index kovboje v rámci týmu (neplést s ID). Toto číslo se v průběhu hry nemění a dává například možnost přidělit
+    každému kovbojovi jinou strategii.
+</p>
+<h4>Herní výpočty.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-bfsdist.png') }}">
+    Kolik kol bude potřeba aby kovboj došel na danou pozici? Počítá se i s pozicemi zdí
+    (ne však s pozicemi ostatních kovbojů, o které by se aktuální kovboj mohl zarazit, a samozřejmě ne s pozicemi střel).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-bfsdirect.png') }}">
+    Kterým směrem se kovboj má vydat, aby šel po nejkratší cestě na zadanou pozici. Počítá se i s pozicemi zdí
+    (ne však s pozicemi ostatních kovbojů, o které by se aktuální kovboj mohl zarazit, a samozřejmě ne s pozicemi střel).
+</p>
+<h4>Herní akce.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-nop.png') }}">
+    NOP (no operation). Zůstaň na místě.
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-mov.png') }}">
+    Pohni se daným směrem (jedním ze čtyř).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-fire.png') }}">
+    Vystřel daným směrem (jedním z osmi).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/cb-movfireparam.png') }}">
+    Parametrická verze předchozích dvou. Pohni nebo vystřel směrem, který může být daný proměnnou.
+</p>
+
+<h3>Bloky střel</h3>
+
+<br>
+
+<h4>Herní info.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/bullet-dir.png') }}">
+    Směr, kam právě střela letí (tj. číslo, které směr reprezentuje, viz popis směrů nahoře).
+</p>
+<p>
+    <img src="{{ url_for('static', filename='block_img/bullet-ttl.png') }}">
+    Kolik tahů střele zbývá, než zmizí (střely mají omezenou životnost).
+</p>
+<h4>Herní akce.</h4>
+<p>
+    <img src="{{ url_for('static', filename='block_img/bullet-turn.png') }}">
+    Určení směru letu střely. Rovně znamená pokračovat v letu stejným směrem. Doleva a doprava zatočí
+    o π/4.
+</p>
+
+
+{% endblock %}

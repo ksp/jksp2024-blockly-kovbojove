@@ -122,6 +122,18 @@ def editor(entity: str):
     )
 
 
+@app.route('/manual')
+def manual():
+    G: game.Game = g.G
+
+    return render_template(
+        'team_manual.html',
+        gold_price=G.map.GOLD_PRICE,
+        shotdown_bounty=G.map.SHOTDOWN_BOUNTY,
+        turns_to_respawn=G.map.TURNS_TO_RESPAWN,
+        bullet_lifetime=G.map.BULLET_LIFETIME
+    )
+
 @app.route('/debug')
 def debug():
     G: game.Game = g.G

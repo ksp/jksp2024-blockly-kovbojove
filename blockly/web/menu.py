@@ -35,6 +35,7 @@ def get_menu():
             MenuItem(url_for('team.editor', entity="cowboy"), "Kovboj"),
             MenuItem(url_for('team.editor', entity="bullet"), "Střela"),
             MenuItem(url_for('team.debug'), "Log akcí"),
+            MenuItem(url_for('team.manual'), "Manuál")
         ]
 
     else:
