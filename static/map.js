@@ -18,13 +18,23 @@ const teamColors = {
     "white": ["#000000", "#d3d3d3"],
     "gray": ["#808080", "#808080"]
 };
+var scoreHeaderHeight = 60;
 
-function showScore(points, element) {
-    var out = [];
-    points.forEach((x) => {
-        out.push(`<div style='color: ${teamColors[x[0]][1]};'>${x[0]}:<br><span>${x[1]}</span></div>`);
+function drawScore(ctx, points) {
+    var scoreTeamWidth = ctx.canvas.width / points.length;
+
+    ctx.textAlign = "center";
+    ctx.font = "bold 16px serif";
+    points.forEach((p, i) => {
+        ctx.fillStyle = teamColors[p[0]][1];
+        ctx.fillText(p[0], (i+0.5)*scoreTeamWidth, 16);
     });
-    element.innerHTML = out.join("");
+
+    ctx.font = "bold 25px monospace";
+    ctx.fillStyle = "black";
+    points.forEach((p, i) => {
+        ctx.fillText(p[1], (i+0.5)*scoreTeamWidth, scoreHeaderHeight - 12);
+    });
 }
 
 function drawGrid(game_canvas) {
@@ -187,15 +197,22 @@ function drawMap(data, game_canvas) {
     squareSize = game_canvas.width / width;
     squareHalf = squareSize / 2;
 
-    if (game_canvas.height != squareSize * height) {
+    if (game_canvas.height != squareSize * height + scoreHeaderHeight) {
         console.log("CHANGED HEIGHT");
-        game_canvas.height = squareSize * height;
+        game_canvas.height = squareSize * height + scoreHeaderHeight;
     }
 
     ctx = game_canvas.getContext('2d');
 
     // Clear canvas
-    ctx.clearRect(0, 0, game_canvas.width, game_canvas.height);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Score
+    drawScore(ctx, data["points"]);
+
+    ctx.translate(0, scoreHeaderHeight);
 
     // Draw all
     drawGrid();
@@ -223,4 +240,6 @@ function drawMap(data, game_canvas) {
 
     // Explosions
     data["explosions"].forEach((e) => drawExplosion(e[0], e[1]));
+
+    ctx.translate(0, -scoreHeaderHeight);
 }
