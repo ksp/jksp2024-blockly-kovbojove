@@ -9,7 +9,7 @@ import time
 from typing import Callable
 
 from .team import Team
-from .actions import ActionType, Direction
+from .actions import ActionType, Direction, all_directions, cowboy_directions, bullet_directions
 
 Coords = tuple[int, int]
 
@@ -32,7 +32,7 @@ class Cowboy(Context):
 
 
 class Bullet(Context):
-    # `direction` is an index for dirs_bullet
+    # `direction` is an index for bullet_directions
     def __init__(self, team: int, position: Coords, direction: int, turns_made: int = 0):
         self.team = team
         self.position = position
@@ -67,19 +67,6 @@ class TeamStats:
 
 class GameMap:
     save_dir: str
-    dirs_cowboy = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-    dirs_bullet = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
-    action_dirs_list = [Direction.W, Direction.NW, Direction.N, Direction.NE, Direction.E, Direction.SE, Direction.S, Direction.SW]
-    action_dirs_dict = {
-        (0, 1): 2,
-        (1, 1): 3,
-        (1, 0): 4,
-        (1, -1): 5,
-        (0, -1): 6,
-        (-1, -1): 7,
-        (-1, 0): 0,
-        (-1, 1): 1
-    }
     wall_grid: list[list[bool]]
     cowboy_grid: list[list[Cowboy]]
     bullet_grid: list[list[Bullet]]
@@ -339,7 +326,7 @@ class GameMap:
                     d = (d + 1) % 4
                 elif dirchange == 1:
                     d = (d + 3) % 4
-                dx, dy = self.dirs_cowboy[d][0], self.dirs_cowboy[d][1]
+                dx, dy = cowboy_directions[d].value[0], cowboy_directions[d].value[1]
                 x, y = (x + dx) % self.width, (y + dy) % self.height
                 self.wall_grid[y][x] = True
 
@@ -374,8 +361,8 @@ class GameMap:
                 continue
             squares_visited[y][x] = True
             reached += 1
-            for d in self.dirs_cowboy:
-                q.put(((x + d[0]) % self.width, (y + d[1]) % self.height))
+            for d in cowboy_directions:
+                q.put(((x + d.value[0]) % self.width, (y + d.value[1]) % self.height))
 
         return reached == self.free_square_count
 
@@ -391,8 +378,8 @@ class GameMap:
             if not self.wall_grid[y][x] and self.cowboy_grid[y][x] is None and self.bullet_grid[y][x] is None and self.gold_grid[y][x] is None:
                 return (x, y)
             seen.add((x, y))
-            for d in self.dirs_bullet:
-                new_pos = ((x + d[0]) % self.width, (y + d[1]) % self.height)
+            for d in bullet_directions:
+                new_pos = ((x + d.value[0]) % self.width, (y + d.value[1]) % self.height)
                 q.put(new_pos)
 
     def generate_cowboy_positions(self) -> None:
@@ -423,8 +410,8 @@ class GameMap:
                 continue
             distances_from_objects[y][x] = dist
             distance_total += dist
-            for d in self.dirs_bullet:
-                new_pos = ((x + d[0]) % self.width, (y + d[1]) % self.height)
+            for d in bullet_directions:
+                new_pos = ((x + d.value[0]) % self.width, (y + d.value[1]) % self.height)
                 bfs_queue.put((dist + 1, new_pos))
 
         rand_choice = rr(distance_total)
@@ -460,8 +447,8 @@ class GameMap:
                 max_list = []
             max_list.append((x, y))
             seen[y][x] = True
-            for d in self.dirs_cowboy:
-                new_pos = ((x + d[0]) % self.width, (y + d[1]) % self.height)
+            for d in cowboy_directions:
+                new_pos = ((x + d.value[0]) % self.width, (y + d.value[1]) % self.height)
                 bfs_queue.put((dist + 1, new_pos))
         x, y = max_list[rr(len(max_list))]
         cowboy.position = (x, y)
@@ -565,7 +552,7 @@ class GameMap:
         #     with Pool(cpus) as pool:
         #         results = pool.starmap(
         #             self.bfs,
-        #             [(cowboy.position, self.dirs_cowboy) for cowboy in cowboys_to_compute]
+        #             [(cowboy.position, cowboy_directions) for cowboy in cowboys_to_compute]
         #         )
         #     for (cowboy, result) in zip(cowboys_to_compute, results):
         #         self.cached_distances[cowboy.position] = result
@@ -593,8 +580,9 @@ class GameMap:
             if status and action.type != ActionType.NOP and action.direction is not None:
                 # In all invalid cases, the cowboys keeps his position
                 x, y = cowboy.position
-                d = action.direction.value
-                new_x, new_y = (x + d[0]) % self.width, (y + d[1]) % self.height
+                d = action.direction
+                new_x, new_y = (x + d.value[0]) % self.width, (y + d.value[1]) % self.height
+
                 if action.type == ActionType.MOVE:
                     if self.wall_grid[new_y][new_x] or self.cowboy_grid[new_y][new_x] is not None:
                         continue
@@ -618,7 +606,7 @@ class GameMap:
                 elif action.type == ActionType.FIRE:
                     self.team_stats[cowboy.team].points -= self.BULLET_PRICE
                     self.team_stats[cowboy.team].fired_bullets += 1
-                    self.current_gun_triggers.append((x, y, self.action_dirs_dict[d]))
+                    self.current_gun_triggers.append((x, y, bullet_directions.index(d)))
 
                     print(f"GAME[ACTION]: Fired bullet at {new_x},{new_y} with direction {d}")
 
@@ -628,7 +616,7 @@ class GameMap:
                             self.bullet_disappear(self.bullet_grid[new_y][new_x])
                         continue
 
-                    bullet = Bullet(cowboy.team, (new_x, new_y), self.action_dirs_dict[d])
+                    bullet = Bullet(cowboy.team, (new_x, new_y), bullet_directions.index(d))
                     self.bullet_grid[new_y][new_x] = bullet
                     other_cowboy = self.cowboy_grid[new_y][new_x]
                     self.bullet_list.append(bullet)
@@ -674,13 +662,13 @@ class GameMap:
             print(f"GAME[ACTION]: {bullet}: status={status}, steps={steps}, result={action}")
 
             if status and action.type == ActionType.BULLET_TURN_L:
-                bullet.direction = (bullet.direction - 1) % len(self.dirs_bullet)
+                bullet.direction = (bullet.direction - 1) % len(bullet_directions)
             elif status and action.type == ActionType.BULLET_TURN_R:
-                bullet.direction = (bullet.direction + 1) % len(self.dirs_bullet)
+                bullet.direction = (bullet.direction + 1) % len(bullet_directions)
 
             x, y = bullet.position
-            d = self.dirs_bullet[bullet.direction]
-            new_x, new_y = (x + d[0]) % self.width, (y + d[1]) % self.height
+            d = bullet_directions[bullet.direction]
+            new_x, new_y = (x + d.value[0]) % self.width, (y + d.value[1]) % self.height
 
             if self.wall_grid[new_y][new_x]:
                 self.bullet_disappear(bullet)
@@ -688,7 +676,6 @@ class GameMap:
                 continue
             self.bullet_grid[y][x] = None
             bullet.position = (new_x, new_y)
-            bullet.direction = self.action_dirs_dict[d]
 
             if self.bullet_grid[new_y][new_x] is not None:
                 self.bullet_collision(bullet, self.bullet_grid[new_y][new_x])
@@ -739,7 +726,7 @@ class GameMap:
 
     # Returns a grid of computed distances from start.
     # Both `distance_from` and `which_way` can then compute what they need
-    def a_star(self, start: Coords, goal: Coords, dirs: list[Coords], metric: Callable[[Coords, Coords], int]) -> list[list[int]]:
+    def a_star(self, start: Coords, goal: Coords, dirs: list[Direction], metric: Callable[[Coords, Coords], int]) -> list[list[int]]:
         start_time = time.time()
 
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
@@ -754,7 +741,7 @@ class GameMap:
                 self.a_star_time += time.time() - start_time
                 return dists_from_start
             for d in dirs:
-                new_coords = (x + d[0]) % self.width, (y + d[1]) % self.height
+                new_coords = (x + d.value[0]) % self.width, (y + d.value[1]) % self.height
                 new_dist = dist + 1
                 new_priority = new_dist + metric(goal, new_coords)
                 pq.put((new_priority, (new_dist, new_coords)))
@@ -776,7 +763,7 @@ class GameMap:
     def maximum_metric(self, start: Coords, goal: Coords) -> int:
         return max(self.coord_diffs(start, goal))
 
-    def bfs(self, start: Coords, dirs: list[Coords]):
+    def bfs(self, start: Coords, dirs: list[Direction]):
         start_time = time.time()
 
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
@@ -788,14 +775,14 @@ class GameMap:
                 continue
             dists_from_start[y][x] = dist
             for d in dirs:
-                q.put((dist + 1, ((x + d[0]) % self.width, (y + d[1]) % self.height)))
+                q.put((dist + 1, ((x + d.value[0]) % self.width, (y + d.value[1]) % self.height)))
 
         self.bfs_time += time.time() - start_time
         return dists_from_start
 
     def compute_cowboy_distances(self, cowboy: Cowboy):
         if cowboy.position not in self.cached_distances:
-            self.cached_distances[cowboy.position] = self.bfs(cowboy.position, self.dirs_cowboy)
+            self.cached_distances[cowboy.position] = self.bfs(cowboy.position, cowboy_directions)
 
         return self.cached_distances[cowboy.position]
 
@@ -819,17 +806,16 @@ class GameMap:
         if context is None or x < 0 or x >= self.width or y < 0 or y >= self.height:
             return (0, 0)
 
-        dirs = self.dirs_cowboy
         distances = self.compute_cowboy_distances(context)
 
         # (x, y) will change from here
         while True:
             xy_changed = False
-            for d in dirs:
-                new_x, new_y = (x + d[0]) % self.width, (y + d[1]) % self.height
+            for d in cowboy_directions:
+                new_x, new_y = (x + d.value[0]) % self.width, (y + d.value[1]) % self.height
                 if distances[new_y][new_x] < distances[y][x]:
                     if context.position == (new_x, new_y):
-                        return (-d[0], -d[1])
+                        return (-d.value[0], -d.value[1])
                     x, y = new_x, new_y
                     xy_changed = True
                     break
@@ -914,7 +900,7 @@ class GameMap:
 
     # Bullet-specific
     def my_direction(self, bullet: Bullet) -> Direction:
-        return self.action_dirs_list[bullet.direction]
+        return all_directions[bullet.direction]
 
     # Bullet's time to live
     def ttl(self, bullet: Bullet) -> int:
