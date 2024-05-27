@@ -4,7 +4,7 @@ from flask_wtf import FlaskForm  # type: ignore
 from werkzeug.exceptions import NotFound
 import wtforms
 from uuid import uuid4
-from simple_websocket import Server, ConnectionClosed
+from simple_websocket import Server, ConnectionClosed  # type: ignore
 
 from blockly import game
 from blockly.exceptions import ProgramParseException
@@ -46,7 +46,7 @@ def login(next: str = "/"):
 
 
 @app.route('/')
-def index():
+def index() -> str:
     G: game.Game = g.G
 
     return render_template(
@@ -56,7 +56,7 @@ def index():
 
 
 @app.route('/statistics')
-def statistics():
+def statistics() -> str:
     G: game.Game = g.G
 
     return render_template(
@@ -66,7 +66,7 @@ def statistics():
 
 
 @app.route('/ws/map', websocket=True)
-def ws_map():
+def ws_map() -> str:
     ws = Server.accept(request.environ)
 
     G: game.Game = g.G
@@ -82,31 +82,32 @@ def ws_map():
 
 
 @app.route('/<string:entity>-editor')
-def editor(entity: str):
+def editor(entity: str) -> str:
     if entity == "cowboy":
         entity_name = "Kovboj"
-        blocks = cowboy_blocks
+        blocks_categories = cowboy_blocks
     elif entity == "bullet":
         entity_name = "Střela"
-        blocks = bullet_blocks
+        blocks_categories = bullet_blocks
     else:
         raise NotFound()
 
     custom_blocks = []
     toolbox_categories = []
-    for (name, special, blocks) in blocks:
-        category = {
+    for (name, special, blocks) in blocks_categories:
+        category: dict[str, str | list] = {
             "kind": "category",
             "name": name
         }
         if special and "custom" in special:
             category["custom"] = special["custom"]
         else:
-            category["contents"] = []
+            contents = []
             for block in blocks:
-                category["contents"].append({"kind": "block", "type": block.name})
+                contents.append({"kind": "block", "type": block.name})
                 if not block.is_blockly_default:
                     custom_blocks.append(block.json_definition())
+            category["contents"] = contents
 
         toolbox_categories.append(category)
 
@@ -123,7 +124,7 @@ def editor(entity: str):
 
 
 @app.route('/manual')
-def manual():
+def manual() -> str:
     G: game.Game = g.G
 
     return render_template(
@@ -134,8 +135,9 @@ def manual():
         bullet_lifetime=G.map.BULLET_LIFETIME
     )
 
+
 @app.route('/debug')
-def debug():
+def debug() -> str:
     G: game.Game = g.G
     team: Team = g.team
 
@@ -147,7 +149,7 @@ def debug():
 
 
 @app.route('/api/<string:entity>', methods=['GET'])
-def get_programs(entity: str):
+def get_programs(entity: str) -> Response:
     team: Team = g.team
 
     if entity == "cowboy":
@@ -170,7 +172,7 @@ def get_programs(entity: str):
             "valid": program.program.valid()
         })
 
-    out.sort(key=lambda x: x['name'])
+    out.sort(key=lambda x: str(x['name']))
 
     return jsonify(out)
 
@@ -243,7 +245,7 @@ def delete_program(entity: str, uuid: str):
 
 
 @app.route('/api/<string:entity>', methods=['POST'])
-def set_program(entity: str):
+def set_program(entity: str) -> tuple[Response, int]:
     if entity == "cowboy":
         factories = cowboy_factories
     elif entity == "bullet":
@@ -253,6 +255,9 @@ def set_program(entity: str):
 
     # Everything comes inside JSON
     data = request.json
+    if not isinstance(data, dict):
+        return jsonify({'error': 'očekáván JSON objekt'}), 400
+
     if "uuid" not in data:
         uuid = str(uuid4())
     else:
@@ -261,18 +266,23 @@ def set_program(entity: str):
         if not set(uuid).issubset(allowed):
             return jsonify({'error': 'uuid obsahuje nepovolené znaky'}), 400
 
-    name = data.get("name", "")
-    if name == "":
-        return jsonify({'error': 'Název nesmí být prázdný'}), 400
+    name = data.get("name")
     description = data.get("description", "")
+    raw_program = data.get("program")
+    if not isinstance(name, str) or name == "":
+        return jsonify({'error': 'Název nesmí být prázdný'}), 400
+    if not isinstance(description, str):
+        return jsonify({'error': 'Popis není string'}), 400
+    if not isinstance(raw_program, str):
+        return jsonify({'error': 'Program není string'}), 400
 
     err: ProgramParseException | None = None
     try:
         parser = Parser(factories)
-        program = parser.parse_program(data.get("program"))
+        program = parser.parse_program(raw_program)
     except ProgramParseException as e:
         err = e
-        program = Program(None, None, data.get("program"))
+        program = Program(None, None, raw_program)
     except Exception as e:
         return jsonify({'error': f'Problém při parsování programu: {e}'}), 400
 
@@ -282,20 +292,20 @@ def set_program(entity: str):
         if entity == "cowboy":
             if team.active_cowboy == uuid and not program.valid():
                 return jsonify({'error': f'Nelze uložit nevalidní program jako aktivní. Uložte ho jako nový: {err}'}), 400
-            program = team.save_cowboy(uuid, name, description, program)
+            team_program = team.save_cowboy(uuid, name, description, program)
             active = team.active_cowboy
         elif entity == "bullet":
             if team.active_bullet == uuid and not program.valid():
                 return jsonify({'error': f'Nelze uložit nevalidní program jako aktivní. Uložte ho jako nový: {err}'}), 400
-            program = team.save_bullet(uuid, name, description, program)
+            team_program = team.save_bullet(uuid, name, description, program)
             active = team.active_bullet
 
     return jsonify({
         "uuid": uuid,
-        "name": program.name,
-        "description": program.description,
-        "last_modified": program.last_modified,
+        "name": team_program.name,
+        "description": team_program.description,
+        "last_modified": team_program.last_modified,
         "active": uuid == active,
-        "valid": program.program.valid(),
+        "valid": team_program.program.valid(),
         "error": str(err) if err else None,
-    })
+    }), 200

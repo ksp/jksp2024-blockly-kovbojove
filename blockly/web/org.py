@@ -1,8 +1,10 @@
+from decimal import Decimal
 from flask import Blueprint, flash, redirect, render_template, request, session, url_for, g
 from flask_wtf import FlaskForm  # type: ignore
+from werkzeug.wrappers.response import Response
 import wtforms
 from wtforms import validators
-from simple_websocket import Server, ConnectionClosed
+from simple_websocket import Server, ConnectionClosed  # type: ignore
 
 from blockly import game
 
@@ -16,7 +18,7 @@ class LoginForm(FlaskForm):
 
 
 @app.route('/org/login', methods=('GET', 'POST'))
-def login(next: str = "/org/"):
+def login(next: str = "/org/") -> Response | str:
     form = LoginForm()
 
     if g.is_org:
@@ -36,7 +38,7 @@ def login(next: str = "/org/"):
 
 
 @app.route('/org/')
-def map():
+def map() -> str:
     G: game.Game = g.G
 
     return render_template(
@@ -46,7 +48,7 @@ def map():
 
 
 @app.route('/org/statistics')
-def statistics():
+def statistics() -> str:
     G: game.Game = g.G
 
     return render_template(
@@ -75,7 +77,7 @@ class TimerForm(FlaskForm):
 
 
 @app.route('/org/control', methods=('GET', 'POST'))
-def control():
+def control() -> Response | str:
     G: game.Game = g.G
     action_form = ActionForm()
     timer_form = TimerForm()
@@ -94,9 +96,9 @@ def control():
             if timer_form.validate_on_submit():
                 if timer_form.start.data:
                     G.start_timer(
-                        cowboy_turn_period=float(timer_form.cowboy_turn_period.data),
-                        bullet_turn_period=float(timer_form.bullet_turn_period.data),
-                        bullet_turns=timer_form.bullet_turns.data,
+                        cowboy_turn_period=float(timer_form.cowboy_turn_period.data or G.timer_cowboy_turn_period),
+                        bullet_turn_period=float(timer_form.bullet_turn_period.data or G.timer_bullet_turn_period),
+                        bullet_turns=timer_form.bullet_turns.data or G.timer_bullet_turns,
                     )
                     flash("Timer spuštěn", "success")
 
@@ -106,8 +108,8 @@ def control():
 
         return redirect(url_for("org.control"))
 
-    timer_form.cowboy_turn_period.data = G.timer_cowboy_turn_period
-    timer_form.bullet_turn_period.data = G.timer_bullet_turn_period
+    timer_form.cowboy_turn_period.data = Decimal(G.timer_cowboy_turn_period)
+    timer_form.bullet_turn_period.data = Decimal(G.timer_bullet_turn_period)
     timer_form.bullet_turns.data = G.timer_bullet_turns
 
     return render_template(
@@ -119,7 +121,7 @@ def control():
 
 
 @app.route('/org/ws/map', websocket=True)
-def ws_map():
+def ws_map() -> str:
     ws = Server.accept(request.environ)
 
     G: game.Game = g.G
