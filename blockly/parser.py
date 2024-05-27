@@ -108,7 +108,7 @@ class ParserInstance:
                 el_path = name and f"{path}.{tag}[{name}]" or f"{path}.{tag}"
 
                 if len(el) == 2 and el[0].tag.split("}")[-1] == "shadow":
-                    el = [el[1]]
+                    el.remove(el[1])
 
                 if len(el) != 1:
                     raise ProgramParseException(f"{el_path}: Element <{tag} name=\"{name}\"> needs exactly 1 child")

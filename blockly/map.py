@@ -1,15 +1,15 @@
-from multiprocessing import Pool
-import os
+# from multiprocessing import Pool
+# import os
 import json
 from random import randrange as rr
 from random import shuffle
 import queue
 from collections import deque
 import time
-from typing import Callable
+from typing import Any, Callable
 
 from .team import Team
-from .actions import ActionType, Direction, all_directions, cowboy_directions, bullet_directions
+from .actions import Action, ActionType, Direction, all_directions, cowboy_directions, bullet_directions
 
 Coords = tuple[int, int]
 
@@ -18,6 +18,8 @@ class Context:
     # Changes every turn
     team: int
     index: int
+
+    position: Coords | None
 
 
 class Cowboy(Context):
@@ -40,11 +42,12 @@ class Bullet(Context):
         self.turns_made = turns_made
 
     def __str__(self) -> str:
-        return f"Bullet(team={self.team},position={self.position},direction={self.direction},turns_made={self.turns_made})"
+        return (f"Bullet(team={self.team},position={self.position},"
+                + f"direction={self.direction},turns_made={self.turns_made})")
 
 
 class Gold:
-    position: Coords
+    position: Coords | None
 
 
 class TeamStats:
@@ -56,7 +59,7 @@ class TeamStats:
     kills: list[int]
     killed_bullets: int
 
-    def __init__(self, kills_list, points = 0, golds = 0, fired_bullets = 0, deaths = 0, killed_bullets = 0):
+    def __init__(self, kills_list, points=0, golds=0, fired_bullets=0, deaths=0, killed_bullets=0):
         self.points = points
         self.golds = golds
         self.fired_bullets = fired_bullets
@@ -68,9 +71,9 @@ class TeamStats:
 class GameMap:
     save_dir: str
     wall_grid: list[list[bool]]
-    cowboy_grid: list[list[Cowboy]]
-    bullet_grid: list[list[Bullet]]
-    gold_grid: list[list[Gold]]
+    cowboy_grid: list[list[Cowboy | None]]
+    bullet_grid: list[list[Bullet | None]]
+    gold_grid: list[list[Gold | None]]
 
     team_stats: list[TeamStats]
 
@@ -94,6 +97,9 @@ class GameMap:
     # (list of rounds, for each round a list of teams)
     cowboy_results: list[list[list[str]]]
     bullet_results: list[list[list[str]]]
+
+    a_star_time: float
+    bfs_time: float
 
     # Only counts cowboy turns
     turn_idx: int
@@ -175,7 +181,7 @@ class GameMap:
                 if self.wall_grid[r][c]:
                     walls.append(pos)
 
-        golds: list[Coords] = [gold.position for gold in self.gold_list]
+        golds: list[Coords | None] = [gold.position for gold in self.gold_list]
         cowboys: list[dict] = [{
             "team": cowboy.team,
             "index": cowboy.index,
@@ -191,7 +197,7 @@ class GameMap:
         cowboy_indices: dict[Cowboy, int] = {
             cowboy: i for i, cowboy in enumerate(self.cowboy_list)
         }
-        respawn_queue: list[int, int] = [
+        respawn_queue: list[Coords] = [
             (respawn_round, cowboy_indices[cowboy]) for (respawn_round, cowboy) in self.cowboy_spawn_deque
         ]
 
@@ -353,7 +359,7 @@ class GameMap:
         # Check that as many are reachable from (init_x, init_y) as are free.
         # BFS:
         reached = 0
-        q = queue.Queue()
+        q: queue.Queue[Coords] = queue.Queue()
         q.put((init_x, init_y))
         while not q.empty():
             x, y = q.get()
@@ -369,18 +375,21 @@ class GameMap:
     def random_free_position(self) -> Coords:
         pos = rr(self.width), rr(self.height)
         seen = set()
-        q = queue.Queue()
+        q: queue.Queue[Coords] = queue.Queue()
         q.put(pos)
         while not q.empty():
             x, y = q.get()
             if (x, y) in seen:
                 continue
-            if not self.wall_grid[y][x] and self.cowboy_grid[y][x] is None and self.bullet_grid[y][x] is None and self.gold_grid[y][x] is None:
+            if (not self.wall_grid[y][x] and self.cowboy_grid[y][x] is None
+                    and self.bullet_grid[y][x] is None
+                    and self.gold_grid[y][x] is None):
                 return (x, y)
             seen.add((x, y))
             for d in bullet_directions:
                 new_pos = ((x + d.value[0]) % self.width, (y + d.value[1]) % self.height)
                 q.put(new_pos)
+        return (-1, -1)  # should not happen
 
     def generate_cowboy_positions(self) -> None:
         # For each cowboy, generate a random spot and then place him at the nearest free square
@@ -398,7 +407,7 @@ class GameMap:
     # (Re)spawns a gold coin at a random spot, prefering squares far away from everything else.
     def spawn_gold(self, gold: Gold) -> None:
         distances_from_objects = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
-        bfs_queue = queue.Queue()
+        bfs_queue: queue.Queue[tuple[int, Coords]] = queue.Queue()
         for x in range(self.width):
             for y in range(self.height):
                 if self.gold_grid[y][x] is not None or self.cowboy_grid[y][x]:
@@ -430,14 +439,15 @@ class GameMap:
         if cowboy.position is not None:
             return
         seen = [[False for _ in range(self.width)] for _ in range(self.height)]
-        bfs_queue = queue.Queue()
+        bfs_queue: queue.Queue[tuple[int, Coords]] = queue.Queue()
         for c in self.cowboy_list:
             if c.position is not None:
                 bfs_queue.put((0, c.position))
         for g in self.gold_list:
-            bfs_queue.put((0, g.position))
+            if g.position is not None:
+                bfs_queue.put((0, g.position))
         dist_max = -1
-        max_list = []
+        max_list: list[Coords] = []
         while not bfs_queue.empty():
             dist, (x, y) = bfs_queue.get()
             if self.wall_grid[y][x] or seen[y][x]:
@@ -456,6 +466,8 @@ class GameMap:
         self.cowboy_grid[y][x] = cowboy
 
     def bullet_disappear(self, bullet: Bullet) -> None:
+        if bullet.position is None:
+            return
         x, y = bullet.position
         bullet.position = None
         self.bullet_list.remove(bullet)
@@ -490,7 +502,7 @@ class GameMap:
     def get_statistics(self) -> list[tuple[str, TeamStats]]:
         return [(team.login, self.team_stats[i]) for (i, team) in enumerate(self.teams)]
 
-    def get_state(self) -> dict[str, list[tuple[Coords, str] | list[Coords]]]:
+    def get_state(self) -> dict[str, Any]:
         walls = []
         cowboys = []
         bullets = []
@@ -522,6 +534,7 @@ class GameMap:
 
     def simulate_cowboys_turn(self) -> None:
         start_time = time.time()
+        self.a_star_time = 0
         self.bfs_time = 0
 
         self.current_explosions = []
@@ -567,17 +580,21 @@ class GameMap:
 
             program = self.teams[cowboy.team].get_cowboy_program()
             status, action, steps = program.execute(self.COWBOY_MAX_STEPS, self, cowboy)
-            if status:
-                cowboy_results[cowboy.team].append(
-                    f"Kovboj na pozici {cowboy.position}: akce {action.type} (směr {action.direction}), {steps} kroků výpočtu"
-                )
-            else:
+            print(f"GAME[ACTION]: {cowboy}: status={status}, steps={steps}, result={action}")
+
+            if not status:
                 cowboy_results[cowboy.team].append(
                     f"Kovboj na pozici {cowboy.position}: ERROR: {action} ({steps} kroků výpočtu)"
                 )
-            print(f"GAME[ACTION]: {cowboy}: status={status}, steps={steps}, result={action}")
+                continue
 
-            if status and action.type != ActionType.NOP and action.direction is not None:
+            assert isinstance(action, Action)
+
+            cowboy_results[cowboy.team].append(
+                f"Kovboj na pozici {cowboy.position}: akce {action.type} (směr {action.direction}), {steps} kroků výpočtu"
+            )
+
+            if action.type != ActionType.NOP and action.direction is not None:
                 # In all invalid cases, the cowboys keeps his position
                 x, y = cowboy.position
                 d = action.direction
@@ -612,8 +629,9 @@ class GameMap:
 
                     if self.wall_grid[new_y][new_x] or self.bullet_grid[new_y][new_x]:
                         self.current_explosions.append((new_x, new_y))
-                        if self.bullet_grid[new_y][new_x] is not None:
-                            self.bullet_disappear(self.bullet_grid[new_y][new_x])
+                        another_bullet = self.bullet_grid[new_y][new_x]
+                        if another_bullet is not None:
+                            self.bullet_disappear(another_bullet)
                         continue
 
                     bullet = Bullet(cowboy.team, (new_x, new_y), bullet_directions.index(d))
@@ -651,15 +669,18 @@ class GameMap:
 
             program = self.teams[bullet.team].get_bullet_program()
             status, action, steps = program.execute(self.BULLET_MAX_STEPS, self, bullet)
-            if status:
-                bullet_results[bullet.team].append(
-                    f"Střela na pozici {bullet.position}: akce {action.type}, {steps} kroků výpočtu"
-                )
-            else:
+            print(f"GAME[ACTION]: {bullet}: status={status}, steps={steps}, result={action}")
+
+            if not status:
                 bullet_results[bullet.team].append(
                     f"Střela na pozici {bullet.position}: ERROR: {action} ({steps} kroků výpočtu)"
                 )
-            print(f"GAME[ACTION]: {bullet}: status={status}, steps={steps}, result={action}")
+
+            assert isinstance(action, Action)
+
+            bullet_results[bullet.team].append(
+                f"Střela na pozici {bullet.position}: akce {action.type}, {steps} kroků výpočtu"
+            )
 
             if status and action.type == ActionType.BULLET_TURN_L:
                 bullet.direction = (bullet.direction - 1) % len(bullet_directions)
@@ -674,15 +695,18 @@ class GameMap:
                 self.bullet_disappear(bullet)
                 self.current_explosions.append((new_x, new_y))
                 continue
+
             self.bullet_grid[y][x] = None
             bullet.position = (new_x, new_y)
 
-            if self.bullet_grid[new_y][new_x] is not None:
-                self.bullet_collision(bullet, self.bullet_grid[new_y][new_x])
+            another_bullet = self.bullet_grid[new_y][new_x]
+            if another_bullet is not None:
+                self.bullet_collision(bullet, another_bullet)
                 continue
 
-            if self.cowboy_grid[new_y][new_x] is not None:
-                self.bullet_hit(self.cowboy_grid[new_y][new_x], bullet)
+            cowboy = self.cowboy_grid[new_y][new_x]
+            if cowboy is not None:
+                self.bullet_hit(cowboy, bullet)
                 continue
 
             self.bullet_grid[new_y][new_x] = bullet
@@ -730,7 +754,7 @@ class GameMap:
         start_time = time.time()
 
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
-        pq = queue.PriorityQueue()
+        pq: queue.PriorityQueue[tuple[int, tuple[int, Coords]]] = queue.PriorityQueue()
         pq.put((0, (0, start)))
         while not pq.empty():
             _, (dist, (x, y)) = pq.get()
@@ -753,8 +777,16 @@ class GameMap:
     # This is a method (rather than a separate function) because it depends on width and height
     # (the playfield is a toroid)
     def coord_diffs(self, start: Coords, goal: Coords) -> Coords:
-        x_dif = min(goal[0] - start[0], (self.width + start[0]) - goal[0]) if start[0] < goal[0] else min(start[0] - goal[0], (self.width + goal[0]) - start[0])
-        y_dif = min(goal[1] - start[1], (self.width + start[1]) - goal[1]) if start[1] < goal[1] else min(start[1] - goal[1], (self.width + goal[1]) - start[1])
+        x_dif = (
+            min(goal[0] - start[0], (self.width + start[0]) - goal[0])
+            if start[0] < goal[0]
+            else min(start[0] - goal[0], (self.width + goal[0]) - start[0])
+        )
+        y_dif = (
+            min(goal[1] - start[1], (self.width + start[1]) - goal[1])
+            if start[1] < goal[1]
+            else min(start[1] - goal[1], (self.width + goal[1]) - start[1])
+        )
         return (x_dif, y_dif)
 
     def manhattan_metric(self, start: Coords, goal: Coords) -> int:
@@ -767,7 +799,7 @@ class GameMap:
         start_time = time.time()
 
         dists_from_start = [[self.infty for _ in range(self.width)] for _ in range(self.height)]
-        q = queue.Queue()
+        q: queue.Queue[tuple[int, Coords]] = queue.Queue()
         q.put((0, start))
         while not q.empty():
             dist, (x, y) = q.get()
@@ -780,7 +812,9 @@ class GameMap:
         self.bfs_time += time.time() - start_time
         return dists_from_start
 
-    def compute_cowboy_distances(self, cowboy: Cowboy):
+    def compute_cowboy_distances(self, cowboy: Cowboy) -> list[list[int]] | None:
+        if cowboy.position is None:
+            return None
         if cowboy.position not in self.cached_distances:
             self.cached_distances[cowboy.position] = self.bfs(cowboy.position, cowboy_directions)
 
@@ -794,6 +828,8 @@ class GameMap:
             return self.width * self.height
 
         distances = self.compute_cowboy_distances(context)
+        if distances is None:
+            return self.infty
 
         return distances[y][x]
 
@@ -807,6 +843,8 @@ class GameMap:
             return (0, 0)
 
         distances = self.compute_cowboy_distances(context)
+        if distances is None:
+            return (0, 0)
 
         # (x, y) will change from here
         while True:

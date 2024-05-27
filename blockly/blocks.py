@@ -331,8 +331,8 @@ class InfoMyDirection(Block):
 
     def execute(self, run: Run) -> int:
         run.add_steps(1)
-        bullet: Bullet = run.context
-        return bullet.direction
+        assert isinstance(run.context, Bullet)
+        return run.context.direction
 
 
 class InfoMyRange(Block):
@@ -344,8 +344,8 @@ class InfoMyRange(Block):
 
     def execute(self, run: Run) -> int:
         run.add_steps(1)
-        bullet: Bullet = run.context
-        return run.map.BULLET_LIFETIME - bullet.turns_made
+        assert isinstance(run.context, Bullet)
+        return run.map.BULLET_LIFETIME - run.context.turns_made
 
 
 class InfoTurn(Block):
@@ -560,11 +560,11 @@ class ModifyPosition(Block):
     position: Block
     direction: Block
 
-    def execute(self, run: Run) -> int:
+    def execute(self, run: Run) -> Position:
         run.add_steps(1)
         pos = cast(Position, self.position.execute(run))
         dir = self.direction.execute(run)
-        assert type(dir) == int
+        assert type(dir) is int
         (dx, dy) = all_directions[dir % 8].value
         (x, y) = pos
         x = (x + dx) % run.map.width
@@ -645,6 +645,7 @@ class CountDistance(Block):
     def execute(self, run: Run) -> int:
         run.add_steps(1)
         pos = cast(Position, self.block_position.execute(run))
+        assert run.context.position is not None
         return run.map.maximum_metric(run.context.position, pos)
 
 
@@ -663,6 +664,7 @@ class GetDirection(Block):
     def execute(self, run: Run) -> int:
         pos = cast(Position, self.pos.execute(run))
         run.add_steps(1)
+        assert run.context.position is not None
 
         x, y = run.context.position
         tx, ty = pos
@@ -713,6 +715,7 @@ class ComputeDistance(Block):
     def execute(self, run: Run) -> int:
         pos = cast(Position, self.pos.execute(run))
         run.add_steps(1)
+        assert isinstance(run.context, Cowboy)
         return run.map.distance_from(run.context, pos)
 
 
@@ -733,6 +736,7 @@ class ComputeFirstStep(Block):
     def execute(self, run: Run) -> int:
         pos = cast(Position, self.pos.execute(run))
         run.add_steps(1)
+        assert isinstance(run.context, Cowboy)
         direction = run.map.which_way(run.context, pos)
         for i, d in enumerate(all_directions):
             if d.value == direction:
@@ -813,7 +817,7 @@ class MathChange(Block):
         run.add_steps(1)
         delta = self.delta.execute(run)
         assert isinstance(delta, int)
-        run.variables[self.var.name] += delta
+        run.variables[self.var.name] += delta  # type: ignore
         return super().execute(run)
 
 
@@ -849,9 +853,9 @@ class ConstantDirection(Block):
 
     direction: Field
 
-    def execute(self, run: Run) -> bool:
+    def execute(self, run: Run) -> int:
         run.add_steps(1)
-        ret = int(self.direction.execute(run))
+        ret = self.direction.execute(run)
         assert isinstance(ret, int)
         return ret
 

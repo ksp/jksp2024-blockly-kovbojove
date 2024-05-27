@@ -27,6 +27,9 @@ class Program:
 
     # returns (True/False, action/string error, #steps)
     def execute(self, max_steps: int, map: GameMap, context: Cowboy | Bullet) -> tuple[bool, Action | str, int]:
+        if self.root is None or self.variables is None:
+            return False, "Not executable", 0
+
         variables: dict[str, bool | int | Position] = {}
         for key, t in self.variables.items():
             if t == bool:

@@ -37,7 +37,7 @@ def stop_handler(sig, frame):
     sys.exit(0)
 
 
-load_from_file = {}
+load_from_file: dict[str, str | None] = {}
 for save_dir in save_dirs:
     load_from_file[save_dir] = None
     save_files = glob.glob(f"{save_dir}/save_*.json")

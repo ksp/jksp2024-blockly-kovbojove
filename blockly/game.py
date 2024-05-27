@@ -1,5 +1,5 @@
 import json
-from simple_websocket import Server
+from simple_websocket import Server  # type: ignore
 from threading import Timer, Lock
 import time
 
@@ -42,8 +42,8 @@ class Game:
         return self.teamsMap.get(name)
 
     def start_timer(self, cowboy_turn_period: float,
-                   bullet_turn_period: float,
-                   bullet_turns: int) -> None:
+                    bullet_turn_period: float,
+                    bullet_turns: int) -> None:
         self.timer_cowboy_turn_period = cowboy_turn_period
         self.timer_bullet_turn_period = bullet_turn_period
         self.timer_bullet_turns = bullet_turns
