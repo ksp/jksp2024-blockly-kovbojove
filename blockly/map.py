@@ -1,5 +1,6 @@
 # from multiprocessing import Pool
 # import os
+import glob
 import json
 from random import randrange as rr
 from random import shuffle
@@ -120,6 +121,8 @@ class GameMap:
     COWBOY_MAX_STEPS = 6000
     BULLET_MAX_STEPS = 2000
 
+    all_rounds: list[dict]
+
     def __init__(
             self,
             width: int,
@@ -128,7 +131,7 @@ class GameMap:
             cowboys_per_team: int = 4,
             # The number of golds on the map will be kept constant
             gold_count: int = 5,
-            load_from_file: str | None = None,
+            load_saves: bool = False,
             save_dir: str = "save",
             wall_fraction: int = 50,
             cluster_max: int = 5):
@@ -144,10 +147,18 @@ class GameMap:
 
         self.save_dir = save_dir
 
-        if load_from_file is not None:
-            self.load(load_from_file)
+        save_files = sorted(glob.glob(f"{save_dir}/save_*.json"))
+        if load_saves and len(save_files) > 0:
+            print(f"Loading previously saved {len(save_files)} rounds")
+            self.load_rounds(save_files)
+            print(f"Loading game from file '{save_files[-1]}'")
+            self.load(self.all_rounds[-1])
+            print("Loading completed")
         else:
+            print("Initializing a new game")
             self.init_new(wall_fraction, cluster_max)
+            self.all_rounds = []
+            print("Game initialization done")
 
     def init_new(self, wall_fraction: int = 50, cluster_max: int = 5):
         self.team_stats = [TeamStats([0 for _ in range(len(self.teams))]) for _ in range(len(self.teams))]
@@ -225,13 +236,20 @@ class GameMap:
             "respawn_queue": respawn_queue,
         }
 
+        self.all_rounds.append(out)
+
         with open(self.save_filename(self.turn_idx, self.bullet_subturn), "w") as f:
             json.dump(out, f)
 
-    def load(self, filename: str) -> None:
-        with open(filename, "r") as f:
-            data = json.load(f)
+    def load_rounds(self, filenames: list[str]) -> None:
+        self.all_rounds = []
+        for filename in filenames:
+            with open(filename, "r") as f:
+                data = json.load(f)
 
+                self.all_rounds.append(data)
+
+    def load(self, data: dict) -> None:
         self.width = data["width"]
         self.height = data["height"]
         self.turn_idx = data["turn_idx"]
@@ -252,7 +270,7 @@ class GameMap:
 
         # Number of teams cannot be changed!
         if len(self.team_stats) != len(self.teams):
-            raise Exception(f"Different number of teams! ({len(self.team_stats)} in '{filename}', {len(self.teams)} teams in config)")
+            raise Exception(f"Different number of teams! ({len(self.team_stats)}, {len(self.teams)} teams in config)")
 
         self.current_explosions = data["explosions"]
         self.current_gun_triggers = data["shot_directions"]

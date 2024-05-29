@@ -37,26 +37,18 @@ def stop_handler(sig, frame):
     sys.exit(0)
 
 
-load_from_file: dict[str, str | None] = {}
-for save_dir in save_dirs:
-    load_from_file[save_dir] = None
-    save_files = glob.glob(f"{save_dir}/save_*.json")
-    if len(save_files) > 0:
-        load_from_file[save_dir] = sorted(save_files)[-1]
-        print(f"Loading game from file '{load_from_file[save_dir]}'")
-
 # MALÁ MAPA:
 # game_map = GameMap(width=20, height=20, teams=teams,
 #                    cowboys_per_team=1,
 #                    gold_count=10,
-#                    load_from_file=load_from_file["save_small"],
+#                    load_saves=True,
 #                    save_dir="save_small")
 
 # STŘEDNÍ MAPA:
 # game_map = GameMap(width=40, height=40, teams=teams,
 #                    cowboys_per_team=4,
 #                    gold_count=20,
-#                    load_from_file=load_from_file["save_medium"],
+#                    load_saves=True,
 #                    save_dir="save_medium")
 
 # VELKÁ MAPA:
@@ -64,7 +56,7 @@ game_map = GameMap(width=50, height=50, teams=teams,
                    cowboys_per_team=10,
                    gold_count=50,
                    wall_fraction=2, cluster_max=500,
-                   load_from_file=load_from_file["save_large"],
+                   load_saves=True,
                    save_dir="save_large")
 
 blockly.game.G = blockly.game.Game(teams=teams, map=game_map, org_login="org", org_passwd="org")
