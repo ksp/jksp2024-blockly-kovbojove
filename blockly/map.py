@@ -219,6 +219,9 @@ class GameMap:
             "cowboys": cowboys,
             "bullets": bullets,
 
+            "explosions": self.current_explosions,
+            "shot_directions": self.current_gun_triggers,
+
             "respawn_queue": respawn_queue,
         }
 
@@ -251,6 +254,9 @@ class GameMap:
         if len(self.team_stats) != len(self.teams):
             raise Exception(f"Different number of teams! ({len(self.team_stats)} in '{filename}', {len(self.teams)} teams in config)")
 
+        self.current_explosions = data["explosions"]
+        self.current_gun_triggers = data["shot_directions"]
+
         self.wall_grid = [[False for _ in range(self.width)] for _ in range(self.height)]
         self.gold_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
         self.gold_list = []
@@ -258,11 +264,6 @@ class GameMap:
         self.cowboy_list = []
         self.bullet_grid = [[None for _ in range(self.width)] for _ in range(self.height)]
         self.bullet_list = []
-
-        # Always empty after load (we do not need to save explosions)
-        self.current_explosions = []
-        # The same goes for gun triggers
-        self.current_gun_triggers = []
 
         for (c, r) in data['walls']:
             self.wall_grid[r][c] = True
@@ -713,6 +714,13 @@ class GameMap:
             bullet.turns_made += 1
             if bullet.turns_made >= self.BULLET_LIFETIME:
                 self.bullet_disappear(bullet)
+
+        # Filter gun triggers
+        new_gun_triggers: list[tuple[int, int, int]] = []
+        for (x, y, dd) in self.current_gun_triggers:
+            if self.cowboy_grid[y][x] is not None:
+                new_gun_triggers.append((x, y, dd))
+        self.current_gun_triggers = new_gun_triggers
 
         self.bullet_subturn += 1
         self.save()
