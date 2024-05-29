@@ -521,7 +521,26 @@ class GameMap:
     def get_statistics(self) -> list[tuple[str, TeamStats]]:
         return [(team.login, self.team_stats[i]) for (i, team) in enumerate(self.teams)]
 
-    def get_state(self) -> dict[str, Any]:
+    def get_state(self, round: int | None = None) -> dict[str, Any] | None:
+        if round is not None:
+            print(round, len(self.all_rounds))
+            if round < 0 or round >= len(self.all_rounds):
+                return None
+            data = self.all_rounds[round]
+            return {
+                "width": data["width"],
+                "height": data["height"],
+                "cowboys": [(cb["position"], self.teams[cb["team"]].login) for cb in data["cowboys"] if cb["position"] is not None],
+                "bullets": [(b["position"], self.teams[b["team"]].login) for b in data["bullets"]],
+                "walls": data["walls"],
+                "golds": [g for g in data["golds"] if g is not None],
+                "explosions": data["explosions"],
+                "shot_directions": data["shot_directions"],
+                'points': [
+                    (team.login, data["team_stats_points"][i]) for (i, team) in enumerate(self.teams)
+                ],
+            }
+
         walls = []
         cowboys = []
         bullets = []
