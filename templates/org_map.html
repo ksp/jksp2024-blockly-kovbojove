@@ -14,8 +14,11 @@
     const game_canvas = document.getElementById('grid_canvas');
 
     // Draw initial state
-    var data = {{ map_state | tojson }};
-    addMapState(data, game_canvas);
+    var init_states = {{ states | tojson }};
+
+    init_states.forEach(state => {
+        addMapState(state, game_canvas);
+    });
 
     var wsProtocol = 'ws://';
     if (window.location.protocol === 'https:') {

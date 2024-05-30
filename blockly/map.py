@@ -643,7 +643,6 @@ class GameMap:
 
     def get_state(self, round: int | None = None) -> dict[str, Any] | None:
         if round is not None:
-            print(round, len(self.all_rounds))
             if round < 0 or round >= len(self.all_rounds):
                 return None
             data = self.all_rounds[round]

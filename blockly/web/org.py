@@ -41,10 +41,20 @@ def login(next: str = "/org/") -> Response | str:
 def map() -> str:
     G: game.Game = g.G
 
-    return render_template(
-        'org_map.html',
-        map_state=G.map.get_state(),
-    )
+    states = [G.map.get_state()]
+
+    return render_template('org_map.html', states=states)
+
+
+@app.route('/org/playback')
+def map_playback() -> str:
+    G: game.Game = g.G
+
+    states = [
+        G.map.get_state(i) for i in range(len(G.map.all_rounds))
+    ]
+
+    return render_template('org_map.html', states=states)
 
 
 @app.route('/org/statistics')

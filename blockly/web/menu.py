@@ -24,6 +24,7 @@ def get_menu():
     if g.is_org:
         items = [
             MenuItem(url_for('org.map'), "Mapa"),
+            MenuItem(url_for('org.map_playback'), "Mapa (playback)"),
             MenuItem(url_for('org.statistics'), "Statistiky"),
             MenuItem(url_for('org.control'), "Ovládání"),
         ]
