@@ -7,7 +7,7 @@ let mapStateCanvas = null;
 function addMapState(state, gameCanvas) {
   mapStateCanvas = gameCanvas;
 
-  console.log("drawing state");
+  // console.log("drawing state");
   states.push(state);
   if (isLive) {
     currentStateIdx = states.length - 1;
@@ -17,7 +17,7 @@ function addMapState(state, gameCanvas) {
 
 function render() {
   const currentState = states[currentStateIdx];
-  console.log("Rendering state", currentStateIdx, currentState);
+  // console.log("Rendering state", currentStateIdx, currentState);
   drawMap(currentState, mapStateCanvas);
   renderControls();
 }
