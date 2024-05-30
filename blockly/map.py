@@ -243,9 +243,129 @@ class GameMap:
 
     def load_rounds(self, filenames: list[str]) -> None:
         self.all_rounds = []
+
+        shot_directions: list[tuple[int, int, int]] = []
+
         for filename in filenames:
             with open(filename, "r") as f:
                 data = json.load(f)
+                print(f"loading from {filename}")
+
+                # Reconstruction of shot_directions should be exact
+                if "shot_directions" not in data:
+                    # Bullets are shot only during cowboy main turn
+                    if data["bullet_subturn"] == 0:
+                        shot_directions = []
+                        prev_bullets: dict[Coords, Any] = {}
+                        if len(self.all_rounds) > 0:
+                            prev_bullets = {tuple(b["position"]): True for b in self.all_rounds[-1]["bullets"]}
+
+                        for b in data["bullets"]:
+                            if tuple(b["position"]) not in prev_bullets:
+
+                                (x, y) = b["position"]
+                                d = bullet_directions[b["direction"]]
+                                x = (x - d.value[0]) % data["width"]
+                                y = (y - d.value[1]) % data["height"]
+                                shot_directions.append((x, y, b["direction"]))
+
+                    cowboys = {tuple(cb["position"]): True for cb in data["cowboys"] if cb["position"] is not None}
+                    data["shot_directions"] = []
+                    for (x, y, d) in shot_directions:
+                        if (x, y) in cowboys:
+                            data["shot_directions"].append((x, y, d))
+                else:
+                    # shot directions survives until next cowboy turn
+                    shot_directions = data["shot_directions"]
+
+                # Reconstruction of explosions is only an extrapolation (some explosions are missing)
+                if "explosions" not in data:
+                    explosions = []
+                    # If some cowboy stopped to exists from the last turn, add the explosion
+                    if len(self.all_rounds) > 0:
+                        prev_round = self.all_rounds[-1]
+                        prev_cowboys = {(cb["team"], cb["index"]): cb["position"] for cb in prev_round["cowboys"]}
+
+                        for cb in data["cowboys"]:
+                            prev_position = prev_cowboys[(cb["team"], cb["index"])]
+                            if cb["position"] is None and prev_position is not None:
+                                explosions.append(tuple(prev_position))
+
+                    prev_bullets = {}
+                    if len(self.all_rounds) > 0:
+                        prev_bullets = {tuple(b["position"]): b for b in self.all_rounds[-1]["bullets"]}
+
+                    if data["bullet_subturn"] == 0:
+                        # Check bullets shot down by cowboys
+                        alive_cowboys = {tuple(cb["position"]) for cb in data["cowboys"] if cb["position"] is not None}
+                        for b in data["bullets"]:
+                            (x, y) = b["position"]
+                            if (x, y) in prev_bullets:
+                                del prev_bullets[(x, y)]
+                        for b in prev_bullets.values():
+                            for dd in range(len(bullet_directions)):
+                                (x, y) = b["position"]
+                                d = bullet_directions[dd]
+                                x = (x - d.value[0]) % data["width"]
+                                y = (y - d.value[1]) % data["height"]
+                                if (x, y) in alive_cowboys:
+                                    explosions.append(tuple(b["position"]))
+                                    shot_directions.append((x, y, dd))
+                                    data["shot_directions"].append((x, y, dd))
+                                    break
+
+                    else:
+                        # Check bullets that disappeared after their turn
+                        walls = {tuple(w) for w in data["walls"]}
+                        for b in data["bullets"]:
+                            (x, y) = b["position"]
+                            d = bullet_directions[b["direction"]]
+                            x = (x - d.value[0]) % data["width"]
+                            y = (y - d.value[1]) % data["height"]
+
+                            if (x, y) in prev_bullets:
+                                del prev_bullets[(x, y)]
+                            elif tuple(b["position"]) in prev_bullets:
+                                # fixup for not moved bullets
+                                del prev_bullets[tuple(b["position"])]
+
+                        missing_bullets_target_fields = []
+                        for b in prev_bullets.values():
+                            if b is None or b["turns_made"] + 1 == self.BULLET_LIFETIME:
+                                continue
+                            # test where could the bullet go
+                            found = False
+                            wall_hit = None
+                            bullet_hit = None
+                            targets = []
+                            for dd in (0, -1, 1):
+                                d = bullet_directions[(b["direction"] + dd) % len(bullet_directions)]
+                                (x, y) = b["position"]
+                                x = (x + d.value[0]) % data["width"]
+                                y = (y + d.value[1]) % data["height"]
+                                targets.append((x, y))
+                                if (x, y) in explosions:
+                                    found = True
+                                    break
+                                if (x, y) in walls:
+                                    wall_hit = (x, y)
+                                if (x, y) in prev_bullets:
+                                    bullet_hit = (x, y)
+                                if (x, y) in missing_bullets_target_fields:
+                                    bullet_hit = (x, y)  # double hit, both bullets have to make one step
+
+                            if not found:
+                                if bullet_hit is not None:
+                                    explosions.append(bullet_hit)
+                                    if bullet_hit in prev_bullets:
+                                        prev_bullets[bullet_hit] = None
+                                elif wall_hit is not None:
+                                    explosions.append(wall_hit)
+                                else:
+                                    missing_bullets_target_fields.extend(targets)
+                                    # print(f"BULLET {b} missing in this round")
+
+                    data["explosions"] = explosions
 
                 self.all_rounds.append(data)
 
